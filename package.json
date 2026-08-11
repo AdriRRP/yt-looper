@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "description": "A practical A/B looper and custom-speed controller for YouTube.",
+  "license": "MIT",
   "engines": {
     "node": ">=22 <27",
     "npm": ">=11"

@@ -143,3 +143,7 @@ tests/          Unit tests
 
 See [quality engineering](docs/QUALITY.md), the [functional test matrix](docs/TEST_MATRIX.md), and
 the [development plan](docs/DEVELOPMENT_PLAN.md) for enforced guarantees and future milestones.
+
+## License
+
+YT Looper is available under the [MIT License](LICENSE).

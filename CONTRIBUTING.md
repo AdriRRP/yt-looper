@@ -28,6 +28,8 @@ user-visible behavior, verification and risk. Generated `dist`, `coverage`, `art
 
 ## Release process
 
-Update the package and all browser manifest versions together, update release notes, and run
-`npm run check:full`. Push an annotated `vX.Y.Z` tag only after protected-branch checks pass. The
-release workflow rebuilds from the tag and publishes packages, checksums, SBOM and provenance.
+Use `npm run release:prepare -- X.Y.Z` to update the package, lockfile and all browser manifest
+versions together, then run `npm run check:full`. Push an annotated `vX.Y.Z` tag only after branch
+checks pass. The release workflow rebuilds from the tag and publishes uniquely named packages,
+checksums, SBOM and provenance. See [the release runbook](docs/RELEASING.md) for dry runs,
+publication and recovery.

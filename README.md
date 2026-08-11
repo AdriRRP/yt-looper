@@ -122,6 +122,7 @@ npm run check:full        # Quality, security, signatures and dependency freshne
 npm run package:firefox   # Create the AMO upload archive
 npm run package:chrome    # Create the Chrome Web Store archive
 npm run package:safari    # Create the temporary Safari archive
+npm run release:package   # Build the complete versioned GitHub Release bundle
 npm run safari:project -- --bundle-id=com.example.ytlooper
 ```
 
@@ -141,8 +142,9 @@ manifests/      Browser-specific manifests
 tests/          Unit tests
 ```
 
-See [quality engineering](docs/QUALITY.md), the [functional test matrix](docs/TEST_MATRIX.md), and
-the [development plan](docs/DEVELOPMENT_PLAN.md) for enforced guarantees and future milestones.
+See [quality engineering](docs/QUALITY.md), the [functional test matrix](docs/TEST_MATRIX.md), the
+[release runbook](docs/RELEASING.md), and the [development plan](docs/DEVELOPMENT_PLAN.md) for
+enforced guarantees and future milestones.
 
 ## License
 

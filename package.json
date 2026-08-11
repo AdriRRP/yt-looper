@@ -42,8 +42,8 @@
     "deps:freshness": "node scripts/check-dependency-freshness.mjs",
     "perf": "node scripts/check-performance.mjs",
     "size": "npm run build:all && node scripts/check-budgets.mjs",
-    "check:quick": "npm run format:check && npm run lint && npm run typecheck && npm run test",
-    "check": "npm run format:check && npm run lint && npm run typecheck && npm run test:coverage && npm run deadcode && npm run lint:extension && npm run size && npm run perf",
+    "check:quick": "npm run release:verify && npm run format:check && npm run lint && npm run typecheck && npm run test",
+    "check": "npm run release:verify && npm run format:check && npm run lint && npm run typecheck && npm run test:coverage && npm run deadcode && npm run lint:extension && npm run size && npm run perf",
     "check:full": "npm run check && npm run security:audit && npm run security:signatures && npm run deps:freshness",
     "firefox": "npm run build && web-ext run --source-dir dist/firefox",
     "chrome": "npm run build:chrome && web-ext run --target chromium --source-dir dist/chrome",
@@ -51,7 +51,10 @@
     "package:firefox": "npm run build:firefox && web-ext build --source-dir dist/firefox --artifacts-dir artifacts --overwrite-dest",
     "package:chrome": "npm run build:chrome && web-ext build --source-dir dist/chrome --artifacts-dir artifacts/chrome --overwrite-dest",
     "package:safari": "npm run build:safari && web-ext build --source-dir dist/safari --artifacts-dir artifacts/safari --overwrite-dest",
-    "package:all": "npm run package:firefox && npm run package:chrome && npm run package:safari"
+    "package:all": "npm run package:firefox && npm run package:chrome && npm run package:safari",
+    "release:prepare": "node scripts/release-version.mjs prepare",
+    "release:verify": "node scripts/release-version.mjs verify",
+    "release:package": "node scripts/package-release.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
@@ -62,7 +65,7 @@
     "eslint": "^10.8.1",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-security": "^4.0.1",
-    "globals": "^17.9.0",
+    "globals": "^17.10.0",
     "htmlhint": "^1.9.2",
     "jsdom": "^30.0.1",
     "knip": "^6.32.2",

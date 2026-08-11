@@ -1,0 +1,9 @@
+{
+  "allowOutdated": [
+    {
+      "package": "typescript",
+      "expires": "2026-11-11",
+      "rationale": "typescript-eslint 8.67 declares TypeScript support only for >=4.8.4 <6.1.0; adopting TypeScript 7 would create an unsupported lint toolchain."
+    }
+  ]
+}

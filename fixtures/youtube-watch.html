@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>YT Looper integration fixture</title>
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        padding: 48px 24px;
+        color: #f1f1f1;
+        background: #0f0f0f;
+        font:
+          14px/1.45 Arial,
+          sans-serif;
+      }
+      main {
+        width: min(1100px, 100%);
+        margin: 0 auto;
+      }
+      #movie_player {
+        position: relative;
+        overflow: hidden;
+        width: 100%;
+        aspect-ratio: 16 / 9;
+        border-radius: 14px;
+        background: radial-gradient(circle at 35% 30%, #7f415d, #20265a 42%, #080b19 85%);
+        box-shadow: 0 18px 60px rgba(0, 0, 0, 0.45);
+      }
+      video {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+      }
+      h1 {
+        margin: 20px 0 5px;
+        font-size: 20px;
+      }
+      p {
+        margin: 0;
+        color: #aaa;
+      }
+      #toggle-ad {
+        margin-top: 14px;
+        border: 0;
+        border-radius: 8px;
+        padding: 8px 12px;
+        cursor: pointer;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <div id="movie_player" class="html5-video-player">
+        <video
+          class="html5-main-video"
+          controls
+          preload="metadata"
+          src="https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4"
+        ></video>
+      </div>
+      <h1>Fixture de integración de YT Looper</h1>
+      <p>Imita la estructura mínima de una página de reproducción de YouTube.</p>
+      <button id="toggle-ad" type="button">Alternar anuncio de prueba</button>
+      <button id="shortcut-a" type="button">Simular atajo A</button>
+      <p id="shortcut-probe">Eventos de teclado recibidos por la página: 0</p>
+    </main>
+    <script>
+      if (new URLSearchParams(location.search).get("ad") === "1") {
+        document.getElementById("movie_player")?.classList.add("ad-showing");
+      }
+      document.getElementById("toggle-ad")?.addEventListener("click", () => {
+        document.getElementById("movie_player")?.classList.toggle("ad-showing");
+      });
+      document.getElementById("shortcut-a")?.addEventListener("click", () => {
+        document.dispatchEvent(
+          new KeyboardEvent("keydown", {
+            code: "KeyA",
+            altKey: true,
+            shiftKey: true,
+            bubbles: true
+          })
+        );
+      });
+      let pageShortcutEvents = 0;
+      document.addEventListener("keydown", () => {
+        pageShortcutEvents += 1;
+        document.getElementById("shortcut-probe").textContent =
+          `Eventos de teclado recibidos por la página: ${pageShortcutEvents}`;
+      });
+    </script>
+    <script src="/content-mock.js"></script>
+    <script src="/content.js"></script>
+  </body>
+</html>

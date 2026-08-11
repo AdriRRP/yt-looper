@@ -1,0 +1,122 @@
+{
+  "extensionName": { "message": "YT Looper" },
+  "extensionDescription": {
+    "message": "Loop precise YouTube video fragments at a custom playback speed."
+  },
+  "actionTitle": { "message": "Open YT Looper library" },
+  "appSubtitle": { "message": "Fragment library" },
+  "currentFragment": { "message": "Current fragment" },
+  "showPanel": { "message": "Show panel" },
+  "currentNeedsPoints": { "message": "Set A and B to save a fragment." },
+  "videoCurrent": { "message": "Current video" },
+  "fragmentDefault": { "message": "Fragment" },
+  "youtubeVideo": { "message": "YouTube video" },
+  "name": { "message": "Name" },
+  "fragmentNamePlaceholder": { "message": "E.g. Solo, bars 8–12" },
+  "folder": { "message": "Folder" },
+  "saveFragment": { "message": "Save fragment" },
+  "library": { "message": "Library" },
+  "fragmentCount": {
+    "message": "$COUNT$ fragment",
+    "placeholders": { "count": { "content": "$1" } }
+  },
+  "fragmentsCount": {
+    "message": "$COUNT$ fragments",
+    "placeholders": { "count": { "content": "$1" } }
+  },
+  "editFragment": { "message": "Edit fragment" },
+  "fragmentDetails": { "message": "Fragment details" },
+  "reviewFragment": { "message": "Review and save" },
+  "editNamedFragment": {
+    "message": "Edit $NAME$",
+    "placeholders": { "name": { "content": "$1" } }
+  },
+  "saveNamedFragment": {
+    "message": "Save $NAME$",
+    "placeholders": { "name": { "content": "$1" } }
+  },
+  "startSeconds": { "message": "A (s)" },
+  "endSeconds": { "message": "B (s)" },
+  "speed": { "message": "Speed" },
+  "closeEditor": { "message": "Close editor" },
+  "delete": { "message": "Delete" },
+  "open": { "message": "Open" },
+  "saveChanges": { "message": "Save changes" },
+  "changesSaved": { "message": "Changes saved." },
+  "confirmDelete": { "message": "Confirm deletion" },
+  "rootLibrary": { "message": "Library (root)" },
+  "createFolderInside": {
+    "message": "Create folder inside $NAME$",
+    "placeholders": { "name": { "content": "$1" } }
+  },
+  "deleteFolder": {
+    "message": "Delete folder $NAME$",
+    "placeholders": { "name": { "content": "$1" } }
+  },
+  "expandFolder": { "message": "Expand $NAME$", "placeholders": { "name": { "content": "$1" } } },
+  "collapseFolder": {
+    "message": "Collapse $NAME$",
+    "placeholders": { "name": { "content": "$1" } }
+  },
+  "emptyFolder": { "message": "Empty folder" },
+  "newFolderName": { "message": "Folder name" },
+  "createFolder": { "message": "Create folder" },
+  "cancel": { "message": "Cancel" },
+  "savedFragment": { "message": "Fragment saved." },
+  "alreadySaved": { "message": "This fragment is already saved." },
+  "savedAs": { "message": "Saved as $NAME$", "placeholders": { "name": { "content": "$1" } } },
+  "updateParameters": { "message": "Update A, B and speed" },
+  "parametersUpToDate": { "message": "Parameters up to date" },
+  "parametersUpdated": { "message": "Fragment parameters updated." },
+  "movedToFolder": {
+    "message": "Fragment moved to $NAME$.",
+    "placeholders": { "name": { "content": "$1" } }
+  },
+  "duplicateFragment": { "message": "A fragment with these parameters already exists." },
+  "invalidEditorSegment": {
+    "message": "B must be at least $SECONDS$ s after A.",
+    "placeholders": { "seconds": { "content": "$1" } }
+  },
+  "widgetMinimize": { "message": "Minimize" },
+  "widgetExpand": { "message": "Expand" },
+  "widgetHide": { "message": "Hide controls for this video" },
+  "widgetSetStart": { "message": "Use current time as A" },
+  "widgetSetEnd": { "message": "Use current time as B" },
+  "widgetStartBack": { "message": "Move A back 0.1 s" },
+  "widgetStartForward": { "message": "Move A forward 0.1 s" },
+  "widgetEndBack": { "message": "Move B back 0.1 s" },
+  "widgetEndForward": { "message": "Move B forward 0.1 s" },
+  "widgetActivate": { "message": "Start loop" },
+  "widgetStop": { "message": "Stop loop" },
+  "widgetSave": { "message": "Save" },
+  "widgetSaveTitle": { "message": "Save fragment" },
+  "widgetSaved": { "message": "Saved" },
+  "detachSavedLoop": { "message": "Detach to create another fragment" },
+  "bookmarkDetached": { "message": "Ready to create a new fragment" },
+  "shortcutsHint": { "message": "⌥/Alt + ⇧ + A/B/L" },
+  "pausedDuringAd": { "message": "Paused during ad" },
+  "waitingForAd": { "message": "Waiting for the ad to finish…" },
+  "loopReady": { "message": "Loop ready" },
+  "pointAMarked": { "message": "Point A set" },
+  "pointBMarked": { "message": "Point B set" },
+  "speedSet": { "message": "Speed: $RATE$×", "placeholders": { "rate": { "content": "$1" } } },
+  "loopActivated": { "message": "Loop started" },
+  "loopStopped": { "message": "Loop stopped" },
+  "validationMissing": { "message": "Set points A and B first." },
+  "validationInvalid": { "message": "The fragment boundaries are invalid." },
+  "validationTooShort": {
+    "message": "The fragment must last at least $SECONDS$ s.",
+    "placeholders": { "seconds": { "content": "$1" } }
+  },
+  "validationOutOfRange": { "message": "Point B is outside the video." },
+  "loopUnavailable": { "message": "The loop cannot be started." },
+  "bookmarkLoaded": {
+    "message": "Fragment: $NAME$",
+    "placeholders": { "name": { "content": "$1" } }
+  },
+  "loopLoadedPressPlay": { "message": "Loop loaded; press play" },
+  "shareLoop": { "message": "Copy loop link" },
+  "linkCopied": { "message": "Loop link copied." },
+  "copyFailed": { "message": "Could not copy the link." },
+  "sharedLoopLoaded": { "message": "Shared loop loaded" }
+}

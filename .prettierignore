@@ -1,0 +1,6 @@
+artifacts/
+coverage/
+dist/
+node_modules/
+safari-app/
+package-lock.json

@@ -1,0 +1,47 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+  id-token: write
+  attestations: write
+
+jobs:
+  release:
+    name: Verify and package desktop extensions
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Verify release candidate
+        run: npm run check:full
+      - name: Package Firefox, Chrome and Safari
+        run: npm run package:all
+      - name: Generate SPDX SBOM
+        run: npm sbom --sbom-format spdx > artifacts/sbom.spdx.json
+      - name: Generate SHA-256 checksums
+        run:
+          find artifacts -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 shasum -a 256 >
+          artifacts/SHA256SUMS
+      - name: Attest release artifacts
+        uses: actions/attest-build-provenance@v4
+        with:
+          subject-path: artifacts/**/*.zip
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run:
+          gh release create "$GITHUB_REF_NAME" artifacts/*.zip artifacts/chrome/*.zip
+          artifacts/safari/*.zip artifacts/sbom.spdx.json artifacts/SHA256SUMS --verify-tag
+          --generate-notes --title "$GITHUB_REF_NAME"

@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>YT Looper</title>
+    <link rel="stylesheet" href="popup.css" />
+    <script src="popup.js" defer></script>
+  </head>
+  <body>
+    <header class="app-header">
+      <img src="icons/icon.svg" width="32" height="32" alt="" />
+      <div>
+        <h1>YT Looper</h1>
+        <p data-i18n="appSubtitle">Biblioteca de fragmentos</p>
+      </div>
+    </header>
+
+    <main>
+      <section class="tree-card" aria-labelledby="tree-heading">
+        <div class="section-title">
+          <div class="eyebrow" id="tree-heading" data-i18n="library">Biblioteca</div>
+          <span id="bookmark-count">0 fragmentos</span>
+        </div>
+        <div class="tree" id="library-tree"></div>
+      </section>
+
+      <section class="current-card" id="current-card" aria-labelledby="current-heading" hidden>
+        <div class="card-heading">
+          <div class="eyebrow" id="current-heading" data-i18n="currentFragment">
+            Fragmento actual
+          </div>
+          <div class="card-actions">
+            <button
+              class="text-button share-current"
+              id="share-current"
+              type="button"
+              data-i18n-aria-label="shareLoop"
+              data-i18n-title="shareLoop"
+              hidden
+            >
+              <svg class="share-glyph" viewBox="0 0 24 24" aria-hidden="true">
+                <circle cx="18" cy="5" r="2.5"></circle>
+                <circle cx="6" cy="12" r="2.5"></circle>
+                <circle cx="18" cy="19" r="2.5"></circle>
+                <path d="m8.2 10.8 7.6-4.5M8.2 13.2l7.6 4.5"></path>
+              </svg>
+            </button>
+            <button class="text-button" id="show-widget" type="button" data-i18n="showPanel" hidden>
+              Mostrar panel
+            </button>
+          </div>
+        </div>
+        <div class="current-context" id="current-context" hidden data-state="unsaved">
+          <button class="current-badge" id="current-badge" type="button">
+            <span class="current-state-icon">
+              <svg
+                class="action-glyph unsaved-state-glyph"
+                id="unsaved-state-glyph"
+                viewBox="0 0 24 24"
+                aria-hidden="true"
+              >
+                <path
+                  d="M6 4.8A1.8 1.8 0 0 1 7.8 3h8.4A1.8 1.8 0 0 1 18 4.8V21l-6-3.8L6 21Z"
+                ></path>
+              </svg>
+              <svg
+                class="action-glyph saved-current-icon"
+                id="saved-current-icon"
+                viewBox="0 0 24 24"
+                aria-hidden="true"
+                hidden
+              >
+                <path d="m6.5 12.5 3.5 3.5 7.5-8"></path>
+              </svg>
+              <svg
+                class="action-glyph saved-dirty-icon"
+                id="saved-dirty-icon"
+                viewBox="0 0 24 24"
+                aria-hidden="true"
+                hidden
+              >
+                <path d="m14.8 5.2 4 4M5 19l3.8-.8L18 8.9a1.8 1.8 0 0 0-4-4L4.8 14Z"></path>
+                <path d="m12.8 7.2 4 4"></path>
+              </svg>
+            </span>
+            <strong id="current-bookmark-name"></strong>
+          </button>
+          <button
+            class="current-action"
+            id="current-bookmark-action"
+            type="button"
+            data-mode="save"
+          >
+            <svg
+              class="action-glyph save-glyph"
+              id="save-current-glyph"
+              viewBox="0 0 24 24"
+              aria-hidden="true"
+            >
+              <path d="M6 4.8A1.8 1.8 0 0 1 7.8 3h8.4A1.8 1.8 0 0 1 18 4.8V21l-6-3.8L6 21Z"></path>
+              <path d="M12 7v6M9 10h6"></path>
+            </svg>
+            <svg
+              class="action-glyph update-glyph"
+              id="update-current-glyph"
+              viewBox="0 0 24 24"
+              aria-hidden="true"
+              hidden
+            >
+              <path d="M6 4.8A1.8 1.8 0 0 1 7.8 3h8.4A1.8 1.8 0 0 1 18 4.8V21l-6-3.8L6 21Z"></path>
+              <path d="M12 6.5v7M9.5 11l2.5 2.5 2.5-2.5"></path>
+            </svg>
+            <svg
+              class="action-glyph current-glyph"
+              id="current-parameters-glyph"
+              viewBox="0 0 24 24"
+              aria-hidden="true"
+              hidden
+            >
+              <circle cx="12" cy="12" r="8"></circle>
+              <path d="m8.5 12 2.3 2.3 4.8-5"></path>
+            </svg>
+          </button>
+        </div>
+        <p id="current-summary"></p>
+        <p class="status" id="save-status" role="status"></p>
+      </section>
+    </main>
+
+    <div class="modal-layer" id="editor-modal" hidden>
+      <button
+        class="modal-backdrop"
+        id="modal-backdrop"
+        type="button"
+        data-i18n-aria-label="closeEditor"
+      ></button>
+      <section
+        class="editor-sheet"
+        id="editor-sheet"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="editor-heading"
+      >
+        <div class="sheet-handle" aria-hidden="true"></div>
+        <div class="card-heading sheet-heading">
+          <div>
+            <div class="modal-kicker" id="editor-kicker" data-i18n="fragmentDetails">
+              Detalles del fragmento
+            </div>
+            <div class="editor-title" id="editor-heading" data-i18n="editFragment">
+              Editar fragmento
+            </div>
+          </div>
+          <button
+            class="icon-button close-button"
+            id="close-editor"
+            type="button"
+            data-i18n-aria-label="closeEditor"
+          >
+            ×
+          </button>
+        </div>
+        <form id="editor-form" autocomplete="off">
+          <label>
+            <span data-i18n="name">Nombre</span>
+            <input id="editor-name" type="text" maxlength="80" required />
+          </label>
+          <div class="editor-grid">
+            <label
+              ><span data-i18n="startSeconds">A (s)</span
+              ><input id="editor-start" type="number" min="0" step="0.05" required
+            /></label>
+            <label
+              ><span data-i18n="endSeconds">B (s)</span
+              ><input id="editor-end" type="number" min="0" step="0.05" required
+            /></label>
+            <label
+              ><span data-i18n="speed">Velocidad</span
+              ><input id="editor-rate" type="number" min="0.25" max="4" step="0.05" required
+            /></label>
+          </div>
+          <label>
+            <span data-i18n="folder">Carpeta</span>
+            <select id="editor-folder"></select>
+          </label>
+          <div class="editor-actions">
+            <button class="danger" id="delete-bookmark" type="button">
+              <span class="trash-glyph"></span><span data-i18n="delete">Eliminar</span>
+            </button>
+            <button id="open-bookmark" type="button">
+              <span class="play-glyph">▶</span><span data-i18n="open">Abrir</span>
+            </button>
+            <button class="primary compact" id="submit-editor" type="submit">
+              <svg class="action-glyph editor-submit-glyph" viewBox="0 0 24 24" aria-hidden="true">
+                <path
+                  d="M6 4.8A1.8 1.8 0 0 1 7.8 3h8.4A1.8 1.8 0 0 1 18 4.8V21l-6-3.8L6 21Z"
+                ></path>
+                <path id="editor-submit-mark" d="m9 10 2 2 4-4"></path></svg
+              ><span id="submit-editor-label" data-i18n="saveChanges">Guardar cambios</span>
+            </button>
+          </div>
+          <p class="status" id="editor-status" role="status"></p>
+        </form>
+      </section>
+    </div>
+  </body>
+</html>

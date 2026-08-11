@@ -1,0 +1,18 @@
+{
+  "entries": [
+    {
+      "advisory": "GHSA-w3rx-r6r6-pgpr",
+      "package": "image-size",
+      "path": "web-ext>addons-linter>image-size",
+      "expires": "2026-11-11",
+      "rationale": "Development-only Mozilla linter parses repository-owned PNG/SVG icons; the vulnerable ICNS/JXL/HEIF parsers are never given untrusted input. No patched image-size release exists yet."
+    },
+    {
+      "advisory": "GHSA-5p2g-fcmc-qvqq",
+      "package": "image-size",
+      "path": "web-ext>addons-linter>image-size",
+      "expires": "2026-11-11",
+      "rationale": "Development-only Mozilla linter parses repository-owned PNG/SVG icons; the vulnerable ICNS/JXL/HEIF parsers are never given untrusted input. No patched image-size release exists yet."
+    }
+  ]
+}

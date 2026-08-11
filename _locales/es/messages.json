@@ -1,0 +1,122 @@
+{
+  "extensionName": { "message": "YT Looper" },
+  "extensionDescription": {
+    "message": "Repite fragmentos precisos de vídeos de YouTube a una velocidad personalizada."
+  },
+  "actionTitle": { "message": "Abrir biblioteca de YT Looper" },
+  "appSubtitle": { "message": "Biblioteca de fragmentos" },
+  "currentFragment": { "message": "Fragmento actual" },
+  "showPanel": { "message": "Mostrar panel" },
+  "currentNeedsPoints": { "message": "Marca A y B para guardar un fragmento." },
+  "videoCurrent": { "message": "Vídeo actual" },
+  "fragmentDefault": { "message": "Fragmento" },
+  "youtubeVideo": { "message": "Vídeo de YouTube" },
+  "name": { "message": "Nombre" },
+  "fragmentNamePlaceholder": { "message": "Ej. Solo, compases 8–12" },
+  "folder": { "message": "Carpeta" },
+  "saveFragment": { "message": "Guardar fragmento" },
+  "library": { "message": "Biblioteca" },
+  "fragmentCount": {
+    "message": "$COUNT$ fragmento",
+    "placeholders": { "count": { "content": "$1" } }
+  },
+  "fragmentsCount": {
+    "message": "$COUNT$ fragmentos",
+    "placeholders": { "count": { "content": "$1" } }
+  },
+  "editFragment": { "message": "Editar fragmento" },
+  "fragmentDetails": { "message": "Detalles del fragmento" },
+  "reviewFragment": { "message": "Revisa y guarda" },
+  "editNamedFragment": {
+    "message": "Editar $NAME$",
+    "placeholders": { "name": { "content": "$1" } }
+  },
+  "saveNamedFragment": {
+    "message": "Guardar $NAME$",
+    "placeholders": { "name": { "content": "$1" } }
+  },
+  "startSeconds": { "message": "A (s)" },
+  "endSeconds": { "message": "B (s)" },
+  "speed": { "message": "Velocidad" },
+  "closeEditor": { "message": "Cerrar editor" },
+  "delete": { "message": "Eliminar" },
+  "open": { "message": "Abrir" },
+  "saveChanges": { "message": "Guardar cambios" },
+  "changesSaved": { "message": "Cambios guardados." },
+  "confirmDelete": { "message": "Confirmar eliminación" },
+  "rootLibrary": { "message": "Biblioteca (raíz)" },
+  "createFolderInside": {
+    "message": "Crear carpeta dentro de $NAME$",
+    "placeholders": { "name": { "content": "$1" } }
+  },
+  "deleteFolder": {
+    "message": "Eliminar carpeta $NAME$",
+    "placeholders": { "name": { "content": "$1" } }
+  },
+  "expandFolder": { "message": "Expandir $NAME$", "placeholders": { "name": { "content": "$1" } } },
+  "collapseFolder": {
+    "message": "Contraer $NAME$",
+    "placeholders": { "name": { "content": "$1" } }
+  },
+  "emptyFolder": { "message": "Carpeta vacía" },
+  "newFolderName": { "message": "Nombre de la carpeta" },
+  "createFolder": { "message": "Crear carpeta" },
+  "cancel": { "message": "Cancelar" },
+  "savedFragment": { "message": "Fragmento guardado." },
+  "alreadySaved": { "message": "Este fragmento ya está guardado." },
+  "savedAs": { "message": "Guardado como $NAME$", "placeholders": { "name": { "content": "$1" } } },
+  "updateParameters": { "message": "Actualizar A, B y velocidad" },
+  "parametersUpToDate": { "message": "Parámetros actualizados" },
+  "parametersUpdated": { "message": "Parámetros del fragmento actualizados." },
+  "movedToFolder": {
+    "message": "Fragmento movido a $NAME$.",
+    "placeholders": { "name": { "content": "$1" } }
+  },
+  "duplicateFragment": { "message": "Ya existe un fragmento con estos parámetros." },
+  "invalidEditorSegment": {
+    "message": "B debe estar al menos $SECONDS$ s después de A.",
+    "placeholders": { "seconds": { "content": "$1" } }
+  },
+  "widgetMinimize": { "message": "Minimizar" },
+  "widgetExpand": { "message": "Expandir" },
+  "widgetHide": { "message": "Ocultar controles en este vídeo" },
+  "widgetSetStart": { "message": "Usar el tiempo actual como A" },
+  "widgetSetEnd": { "message": "Usar el tiempo actual como B" },
+  "widgetStartBack": { "message": "Retroceder A 0,1 s" },
+  "widgetStartForward": { "message": "Avanzar A 0,1 s" },
+  "widgetEndBack": { "message": "Retroceder B 0,1 s" },
+  "widgetEndForward": { "message": "Avanzar B 0,1 s" },
+  "widgetActivate": { "message": "Activar loop" },
+  "widgetStop": { "message": "Detener loop" },
+  "widgetSave": { "message": "Guardar" },
+  "widgetSaveTitle": { "message": "Guardar fragmento" },
+  "widgetSaved": { "message": "Guardado" },
+  "detachSavedLoop": { "message": "Desvincular para crear otro fragmento" },
+  "bookmarkDetached": { "message": "Listo para crear un fragmento nuevo" },
+  "shortcutsHint": { "message": "⌥/Alt + ⇧ + A/B/L" },
+  "pausedDuringAd": { "message": "Pausado durante el anuncio" },
+  "waitingForAd": { "message": "Esperando a que termine el anuncio…" },
+  "loopReady": { "message": "Loop listo" },
+  "pointAMarked": { "message": "Punto A marcado" },
+  "pointBMarked": { "message": "Punto B marcado" },
+  "speedSet": { "message": "Velocidad: $RATE$×", "placeholders": { "rate": { "content": "$1" } } },
+  "loopActivated": { "message": "Loop activado" },
+  "loopStopped": { "message": "Loop detenido" },
+  "validationMissing": { "message": "Marca primero los puntos A y B." },
+  "validationInvalid": { "message": "Los límites del fragmento no son válidos." },
+  "validationTooShort": {
+    "message": "El fragmento debe durar al menos $SECONDS$ s.",
+    "placeholders": { "seconds": { "content": "$1" } }
+  },
+  "validationOutOfRange": { "message": "El punto B está fuera del vídeo." },
+  "loopUnavailable": { "message": "No se puede activar el loop." },
+  "bookmarkLoaded": {
+    "message": "Fragmento: $NAME$",
+    "placeholders": { "name": { "content": "$1" } }
+  },
+  "loopLoadedPressPlay": { "message": "Loop cargado; pulsa reproducir" },
+  "shareLoop": { "message": "Copiar enlace del loop" },
+  "linkCopied": { "message": "Enlace del loop copiado." },
+  "copyFailed": { "message": "No se pudo copiar el enlace." },
+  "sharedLoopLoaded": { "message": "Loop compartido cargado" }
+}

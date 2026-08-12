@@ -146,6 +146,9 @@ See [quality engineering](docs/QUALITY.md), the [functional test matrix](docs/TE
 [release runbook](docs/RELEASING.md), and the [development plan](docs/DEVELOPMENT_PLAN.md) for
 enforced guarantees and future milestones.
 
+The bilingual [user Wiki](https://github.com/AdriRRP/yt-looper/wiki) covers every product feature,
+manual installation from release ZIPs for all three browsers, privacy and troubleshooting.
+
 ## License
 
 YT Looper is available under the [MIT License](LICENSE).

@@ -76,6 +76,21 @@ describe("release version tooling", () => {
     expect(lock.packages[""]?.version).toBe("1.2.3");
   });
 
+  it("keeps prepared JSON compatible with the repository formatter", () => {
+    const root = makeReleaseFixture();
+    writeJson(join(root, "manifests/firefox.json"), {
+      name: "Fixture",
+      version: "0.11.0",
+      permissions: ["storage", "activeTab", "clipboardWrite"]
+    });
+
+    const result = execute(versionScript, ["prepare", "1.2.3", "--root", root]);
+    expect(result.status).toBe(0);
+    expect(readFileSync(join(root, "manifests/firefox.json"), "utf8")).toContain(
+      '"permissions": ["storage", "activeTab", "clipboardWrite"]'
+    );
+  });
+
   it("rejects inconsistent files before a release", () => {
     const root = makeReleaseFixture();
     writeJson(join(root, "manifests/safari.json"), { name: "Fixture", version: "0.12.0" });

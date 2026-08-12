@@ -1,6 +1,7 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
+import { format } from "prettier";
 
 const VERSION_PATTERN = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/u;
 const MANIFESTS = ["firefox", "chrome", "safari"];
@@ -120,9 +121,10 @@ export async function prepareReleaseVersion(version, { root = process.cwd() } = 
     ...MANIFESTS.map((browser) => [paths.manifests[browser], documents.manifests[browser]])
   ];
   await Promise.all(
-    files.map(([path, document]) =>
-      writeFile(path, `${JSON.stringify(document, null, 2)}\n`, "utf8")
-    )
+    files.map(async ([path, document]) => {
+      const content = await format(JSON.stringify(document), { parser: "json" });
+      await writeFile(path, content, "utf8");
+    })
   );
   await verifyReleaseVersion({ root });
   return files.map(([path]) => path);

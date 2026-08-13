@@ -91,7 +91,8 @@ restore it. The interface follows Firefox's language and currently includes Span
 When a video has no A/B parameters yet, the widget starts collapsed and expands automatically when
 the first point is marked.
 
-No browsing data or video content is collected or transmitted.
+No browsing data or video content is transmitted. The extension processes only the active YouTube
+video and stores the limited identifiers, titles and loop parameters needed for its local library.
 
 ## Local development
 

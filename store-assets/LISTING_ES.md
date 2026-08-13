@@ -21,7 +21,7 @@ reproduce el fragmento.
 - Enlaces de loop compartibles que no requieren una cuenta ni un servidor.
 - Estado independiente por pestaña y actualizaciones seguras entre ventanas.
 - Pausa automática de los controles durante anuncios.
-- Interfaz en español e inglés, sin analítica, anuncios ni recopilación de datos.
+- Interfaz en español e inglés, sin analítica, anuncios ni transmisión de datos.
 
 Todos los fragmentos permanecen en el almacenamiento local del navegador. La extensión solo actúa en
 páginas de reproducción de YouTube.
@@ -37,7 +37,9 @@ YouTube a una velocidad personalizada.
 - `clipboardWrite`: copia un enlace de loop únicamente al pulsar Compartir.
 - `https://www.youtube.com/*`: inserta el controlador A/B exclusivamente en páginas de YouTube.
 - Código remoto: no; todo el JavaScript ejecutable está incluido en el paquete.
-- Datos recopilados o transmitidos: ninguno.
+- Datos procesados localmente: identificador y título del vídeo, puntos A/B, velocidad, nombres y
+  carpetas necesarios para la biblioteca del usuario.
+- Datos transmitidos, compartidos o recopilados fuera del dispositivo: ninguno.
 
 ## Notas para revisión
 

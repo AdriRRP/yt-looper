@@ -4,14 +4,15 @@ Effective date / Fecha de entrada en vigor: 13 August 2026
 
 ## English
 
-YT Looper does not collect, transmit, sell or share personal data, browsing history, video content,
-usage analytics, diagnostics or advertising identifiers. It has no server, account system, analytics
-SDK, advertising SDK or remotely executed code.
+YT Looper does not transmit, sell, share or perform off-device collection of personal data, browsing
+activity, video content, usage analytics, diagnostics or advertising identifiers. It has no server,
+account system, analytics SDK, advertising SDK or remotely executed code.
 
-The extension stores the following information locally in the browser profile so its product
-features work: playback speed, remembered A/B points, YouTube video identifiers and titles, and the
-names and folder structure created by the user. This information stays in the browser's local
-extension storage and is not synchronized by YT Looper to any external service.
+The extension processes and stores the following limited information locally in the browser profile
+so its product features work: playback speed, remembered A/B points, YouTube video identifiers and
+titles, and the names and folder structure created by the user. It does not retain the video or
+audio itself or a general browsing history. This information stays in the browser's local extension
+storage and is not synchronized by YT Looper to any external service.
 
 When the user explicitly chooses **Share**, YT Looper places a generated YouTube link on the
 clipboard. The normal YouTube URL contains the video identifier; the `ytl` fragment contains only a
@@ -25,14 +26,16 @@ through the [public support tracker](https://github.com/AdriRRP/yt-looper/issues
 
 ## Español
 
-YT Looper no recopila, transmite, vende ni comparte datos personales, historial de navegación,
-contenido de vídeo, analítica de uso, diagnósticos ni identificadores publicitarios. No tiene
-servidor, sistema de cuentas, SDK de analítica o publicidad ni código ejecutado remotamente.
+YT Looper no transmite, vende, comparte ni recopila fuera del dispositivo datos personales,
+actividad de navegación, contenido de vídeo, analítica de uso, diagnósticos ni identificadores
+publicitarios. No tiene servidor, sistema de cuentas, SDK de analítica o publicidad ni código
+ejecutado remotamente.
 
-La extensión guarda localmente en el perfil del navegador la información necesaria para sus
-funciones: velocidad de reproducción, puntos A/B recordados, identificadores y títulos de vídeos de
-YouTube, y los nombres y carpetas creados por el usuario. Estos datos permanecen en el
-almacenamiento local de la extensión y YT Looper no los sincroniza con ningún servicio externo.
+La extensión procesa y guarda localmente en el perfil del navegador la información limitada que
+necesitan sus funciones: velocidad de reproducción, puntos A/B recordados, identificadores y títulos
+de vídeos de YouTube, y los nombres y carpetas creados por el usuario. No conserva el vídeo o audio
+en sí ni un historial general de navegación. Estos datos permanecen en el almacenamiento local de la
+extensión y YT Looper no los sincroniza con ningún servicio externo.
 
 Cuando el usuario elige explícitamente **Compartir**, YT Looper copia al portapapeles un enlace de
 YouTube generado. La URL normal contiene el identificador del vídeo; el fragmento `ytl` contiene

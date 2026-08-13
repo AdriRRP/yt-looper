@@ -37,7 +37,9 @@ requirements.
 3. Add both localized listings and screenshots, plus `promotional/small-promo.png`; the marquee is
    optional.
 4. In Privacy practices, paste the single-purpose statement and each permission justification,
-   select **no remote code**, disclose no collected data and add the privacy policy URL.
+   select **no remote code**, disclose the local-only handling of saved YouTube identifiers, titles
+   and loop parameters, certify that nothing is collected off-device or shared, and add the privacy
+   policy URL.
 5. Choose public/unlisted visibility and regions, save the draft, run the dashboard preview, then
    submit for review.
 

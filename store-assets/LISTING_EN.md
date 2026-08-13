@@ -20,7 +20,7 @@ A and B, choose a speed from 0.25× to 4×, and YT Looper preserves pitch while 
 - Shareable loop links with no account or server.
 - Independent per-tab playback and concurrency-safe updates between windows.
 - Automatic control suspension during advertisements.
-- English and Spanish UI with no analytics, advertising or data collection.
+- English and Spanish UI with no analytics, advertising or data transmission.
 
 Every saved fragment remains in the browser's local extension storage. The extension operates only
 on YouTube watch pages.
@@ -36,7 +36,9 @@ speed.
 - `clipboardWrite`: copies a generated loop link only when the user selects Share.
 - `https://www.youtube.com/*`: injects the A/B controller exclusively into YouTube pages.
 - Remote code: no; all executable JavaScript is included in the package.
-- Data collected or transmitted: none.
+- Data processed locally: video identifier and title, A/B points, speed, names and folders required
+  for the user's library.
+- Data transmitted, shared or collected off-device: none.
 
 ## Reviewer notes
 

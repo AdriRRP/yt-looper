@@ -74,6 +74,9 @@ describe("release version tooling", () => {
       packages: Record<string, { version: string }>;
     };
     expect(lock.packages[""]?.version).toBe("1.2.3");
+    expect(readFileSync(join(root, "package-lock.json"), "utf8")).toContain(
+      '"packages": {\n    "": {'
+    );
   });
 
   it("keeps prepared JSON compatible with the repository formatter", () => {
@@ -140,10 +143,19 @@ describe("release packaging contract", () => {
     expect(workflow).toContain("workflow_dispatch:");
     expect(workflow).toContain("dry_run:");
     expect(workflow).toMatch(/\n {2}verify:\n/u);
+    expect(workflow).toMatch(/\n {2}browser-flows:\n/u);
     expect(workflow).toMatch(/\n {2}package:\n/u);
     expect(workflow).toMatch(/\n {2}publish:\n/u);
     expect(workflow).toContain("if: needs.verify.outputs.dry_run != 'true'");
     expect(workflow).toContain("actions/upload-artifact@");
     expect(workflow).toContain("actions/download-artifact@");
+    expect(workflow).toContain("verified-browser-builds-v");
+    expect(workflow).toContain("npm run release:package -- --prebuilt");
+  });
+
+  it("generates the SBOM deterministically from the committed lockfile", () => {
+    const script = readFileSync(packageScript, "utf8");
+    expect(script).toContain('["sbom", "--package-lock-only", "--sbom-format", "spdx"]');
+    expect(script).toContain('["archive", "--format=zip", `--output=${sourcePath}`, "HEAD"]');
   });
 });

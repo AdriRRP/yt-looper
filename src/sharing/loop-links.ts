@@ -1,17 +1,43 @@
-import { MAX_PLAYBACK_RATE, MIN_LOOP_SECONDS, MIN_PLAYBACK_RATE } from "../core/loop-engine";
+import {
+  MAX_PLAYBACK_RATE,
+  MIN_PLAYBACK_RATE,
+  normalizeLoopTime,
+  validateSegment
+} from "../core/loop-engine";
 
 export const SHARED_LOOP_PARAMETER = "ytl";
-const SHARED_LOOP_VERSION = 1;
+const SHARED_LOOP_VERSION = 2;
 const MAX_ENCODED_PAYLOAD_LENGTH = 512;
 const YOUTUBE_VIDEO_ID = /^[A-Za-z0-9_-]{11}$/;
 
 export interface SharedLoopPayload {
+  v: 1 | 2;
+  i: string;
+  a: number;
+  b: number;
+  r: number;
+}
+
+export interface DecodedSharedLoopPayload {
+  v: 1 | 2;
+  a: number;
+  b: number;
+  r: number;
+}
+
+interface CurrentSharedLoopPayload extends Omit<DecodedSharedLoopPayload, "v"> {
+  v: 2;
+}
+
+interface LegacySharedLoopPayload {
   v: 1;
   i: string;
   a: number;
   b: number;
   r: number;
 }
+
+type WireSharedLoopPayload = CurrentSharedLoopPayload | LegacySharedLoopPayload;
 
 export interface SharedLoopInput {
   videoId: string;
@@ -22,15 +48,14 @@ export interface SharedLoopInput {
 
 export type SharedLoopLocation = "query" | "fragment";
 
-function createSharedLoopPayload(input: SharedLoopInput): SharedLoopPayload | null {
-  const payload: SharedLoopPayload = {
+function createSharedLoopPayload(input: SharedLoopInput): CurrentSharedLoopPayload | null {
+  const payload: CurrentSharedLoopPayload = {
     v: SHARED_LOOP_VERSION,
-    i: input.videoId,
-    a: input.start,
-    b: input.end,
+    a: normalizeLoopTime(input.start),
+    b: normalizeLoopTime(input.end),
     r: input.rate
   };
-  return isValidPayload(payload) ? payload : null;
+  return YOUTUBE_VIDEO_ID.test(input.videoId) && isValidPayload(payload) ? payload : null;
 }
 
 export function encodeSharedLoop(input: SharedLoopInput): string | null {
@@ -41,13 +66,23 @@ export function encodeSharedLoop(input: SharedLoopInput): string | null {
   return base64UrlEncode(JSON.stringify(payload));
 }
 
-export function decodeSharedLoop(encoded: string): SharedLoopPayload | null {
+export function decodeSharedLoop(encoded: string): DecodedSharedLoopPayload | null {
+  const payload = decodeWireSharedLoop(encoded);
+  return payload ? { v: payload.v, a: payload.a, b: payload.b, r: payload.r } : null;
+}
+
+function decodeWireSharedLoop(encoded: string): WireSharedLoopPayload | null {
   if (!encoded || encoded.length > MAX_ENCODED_PAYLOAD_LENGTH) {
     return null;
   }
   try {
     const candidate = JSON.parse(base64UrlDecode(encoded)) as unknown;
-    return isValidPayload(candidate) ? candidate : null;
+    if (!isValidPayload(candidate)) {
+      return null;
+    }
+    return candidate.v === 1
+      ? { v: 1, i: candidate.i, a: candidate.a, b: candidate.b, r: candidate.r }
+      : { v: 2, a: candidate.a, b: candidate.b, r: candidate.r };
   } catch {
     return null;
   }
@@ -88,27 +123,35 @@ export function readSharedLoopFromUrl(input: string | URL): SharedLoopPayload | 
   if (!encoded) {
     return null;
   }
-  const payload = decodeSharedLoop(encoded);
-  return payload?.i === url.searchParams.get("v") ? payload : null;
+  const payload = decodeWireSharedLoop(encoded);
+  const videoId = url.searchParams.get("v");
+  if (!payload || !videoId || !YOUTUBE_VIDEO_ID.test(videoId)) {
+    return null;
+  }
+  if (payload.v === 1 && payload.i !== videoId) {
+    return null;
+  }
+  return { ...payload, i: videoId };
 }
 
-export function sharedLoopFitsDuration(payload: SharedLoopPayload, duration: number): boolean {
+export function sharedLoopFitsDuration(
+  payload: Pick<DecodedSharedLoopPayload, "b">,
+  duration: number
+): boolean {
   return !Number.isFinite(duration) || payload.b <= duration + 0.01;
 }
 
-function isValidPayload(candidate: unknown): candidate is SharedLoopPayload {
+function isValidPayload(candidate: unknown): candidate is WireSharedLoopPayload {
   if (!candidate || typeof candidate !== "object") {
     return false;
   }
-  const payload = candidate as Partial<SharedLoopPayload>;
+  const payload = candidate as Partial<LegacySharedLoopPayload & DecodedSharedLoopPayload>;
   return (
-    payload.v === SHARED_LOOP_VERSION &&
-    typeof payload.i === "string" &&
-    YOUTUBE_VIDEO_ID.test(payload.i) &&
+    (payload.v === 1 || payload.v === SHARED_LOOP_VERSION) &&
+    (payload.v !== 1 || (typeof payload.i === "string" && YOUTUBE_VIDEO_ID.test(payload.i))) &&
     isFiniteNumber(payload.a) &&
-    payload.a >= 0 &&
     isFiniteNumber(payload.b) &&
-    payload.b - payload.a >= MIN_LOOP_SECONDS &&
+    validateSegment(payload.a, payload.b).valid &&
     isFiniteNumber(payload.r) &&
     payload.r >= MIN_PLAYBACK_RATE &&
     payload.r <= MAX_PLAYBACK_RATE

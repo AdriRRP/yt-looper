@@ -10,9 +10,11 @@ const popupHtml = readFileSync(resolve(process.cwd(), "popup/popup.html"), "utf8
 
 interface PopupHarness {
   memory: Record<string, unknown>;
+  storageListeners: ((changes: Record<string, unknown>, areaName: string) => void)[];
   sendMessage: ReturnType<typeof vi.fn>;
   createTab: ReturnType<typeof vi.fn>;
   writeText: ReturnType<typeof vi.fn>;
+  storageSet: ReturnType<typeof vi.fn>;
 }
 
 const bookmark = (
@@ -50,14 +52,42 @@ const state = (): StoredState => ({
 async function loadPopup(
   snapshot: CurrentLoopSnapshot,
   initialState = state(),
-  options: { sendError?: boolean; noActiveTab?: boolean } = {}
+  options: {
+    sendError?: boolean;
+    noActiveTab?: boolean;
+    hangMessage?: boolean;
+    hangStorage?: boolean;
+    storageError?: boolean;
+  } = {}
 ): Promise<PopupHarness> {
   vi.resetModules();
+  if (options.hangMessage || options.hangStorage) {
+    vi.useFakeTimers();
+  }
   document.open();
   document.write(popupHtml);
   document.close();
-  const memory: Record<string, unknown> = { ytLooperStateV3: structuredClone(initialState) };
+  const memory: Record<string, unknown> = {
+    ytLooperStateV3: structuredClone(initialState),
+    ytLooperRuntimeV1: {
+      version: 1,
+      settings: structuredClone(initialState.settings),
+      loops: structuredClone(initialState.loops)
+    },
+    ytLooperLibraryV1: {
+      version: 1,
+      folders: structuredClone(initialState.folders),
+      bookmarks: structuredClone(initialState.bookmarks)
+    },
+    ytLooperStorageLayoutV1: 1
+  };
   const storageGet = vi.fn(async (keys: string | string[]) => {
+    if (options.hangStorage) {
+      return new Promise<Record<string, unknown>>(() => undefined);
+    }
+    if (options.storageError) {
+      throw new Error("Storage unavailable");
+    }
     const requested = Array.isArray(keys) ? keys : [keys];
     return Object.fromEntries(
       requested.filter((key) => key in memory).map((key) => [key, structuredClone(memory[key])])
@@ -66,7 +96,11 @@ async function loadPopup(
   const storageSet = vi.fn(async (items: Record<string, unknown>) => {
     Object.assign(memory, structuredClone(items));
   });
+  const storageListeners: ((changes: Record<string, unknown>, areaName: string) => void)[] = [];
   const sendMessage = vi.fn(async (_tabId: number, message: { type: string }) => {
+    if (options.hangMessage) {
+      return new Promise<never>(() => undefined);
+    }
     if (options.sendError) {
       throw new Error("No content script");
     }
@@ -74,7 +108,18 @@ async function loadPopup(
   });
   const createTab = vi.fn().mockResolvedValue({ id: 9 });
   vi.stubGlobal("browser", {
-    storage: { local: { get: storageGet, set: storageSet } },
+    storage: {
+      local: { get: storageGet, set: storageSet },
+      onChanged: {
+        addListener: vi.fn((listener) => storageListeners.push(listener)),
+        removeListener: vi.fn((listener) => {
+          const index = storageListeners.indexOf(listener);
+          if (index >= 0) {
+            storageListeners.splice(index, 1);
+          }
+        })
+      }
+    },
     tabs: {
       query: vi.fn().mockResolvedValue(options.noActiveTab ? [{}] : [{ id: 7 }]),
       sendMessage,
@@ -92,8 +137,11 @@ async function loadPopup(
     return 1;
   });
   const module = await import("../src/popup/index");
+  if (options.hangMessage || options.hangStorage) {
+    await vi.advanceTimersByTimeAsync(1600);
+  }
   await module.popupReady;
-  return { memory, sendMessage, createTab, writeText };
+  return { memory, storageListeners, sendMessage, createTab, writeText, storageSet };
 }
 
 function byId<T extends HTMLElement>(id: string): T {
@@ -102,6 +150,21 @@ function byId<T extends HTMLElement>(id: string): T {
 
 function submit(form: HTMLFormElement): void {
   form.dispatchEvent(new SubmitEvent("submit", { bubbles: true, cancelable: true }));
+}
+
+function expandFolder(folderId: string): void {
+  const row = document.querySelector<HTMLElement>(`.folder-row[data-folder-id="${folderId}"]`);
+  const toggle = row?.querySelector<HTMLButtonElement>(".tree-toggle");
+  if (toggle?.dataset.expanded === "false") {
+    row!.querySelector<HTMLButtonElement>(".tree-label")!.click();
+  }
+}
+
+function revealBookmark(bookmarkId: "saved-1" | "saved-2"): void {
+  expandFolder("songs");
+  if (bookmarkId === "saved-2") {
+    expandFolder("solos");
+  }
 }
 
 function pointerEvent(type: string, properties: Record<string, number>): Event {
@@ -123,6 +186,24 @@ afterEach(() => {
 });
 
 describe("popup use cases", () => {
+  it("renders the root library even when Safari tab messaging never answers", async () => {
+    await loadPopup({ available: false }, state(), { hangMessage: true });
+    expect(document.querySelector('.folder-row[data-folder-id=""]')).not.toBeNull();
+    expect(byId("bookmark-count").textContent).toBe("2 fragmentos");
+    expect(byId("current-card").hidden).toBe(true);
+  });
+
+  it("renders a recoverable library state when Safari storage never answers", async () => {
+    const warning = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    await loadPopup({ available: false }, state(), { hangStorage: true });
+
+    expect(document.querySelector('.folder-row[data-folder-id=""]')).not.toBeNull();
+    expect(byId("bookmark-count").textContent).toBe("0 fragmentos");
+    expect(byId("library-status").textContent).toContain("No se pudo cargar");
+    expect(byId("library-status").dataset.error).toBe("true");
+    expect(warning).toHaveBeenCalled();
+  });
+
   it("renders a saved current loop, shares it, restores the widget and edits its title", async () => {
     const harness = await loadPopup({
       available: true,
@@ -169,6 +250,7 @@ describe("popup use cases", () => {
 
   it("validates editing, prevents duplicates, moves folders and deletes with confirmation", async () => {
     const harness = await loadPopup({ available: false });
+    revealBookmark("saved-1");
     const chorusRow = document.querySelector<HTMLElement>('[data-bookmark-id="saved-1"]')!;
     chorusRow.querySelector<HTMLButtonElement>(".tree-label")!.click();
     const editorForm = byId<HTMLFormElement>("editor-form");
@@ -176,10 +258,12 @@ describe("popup use cases", () => {
     byId<HTMLInputElement>("editor-end").value = "5.01";
     submit(editorForm);
     expect(byId("editor-status").textContent).toContain("0.05");
+    await settle();
 
     byId<HTMLInputElement>("editor-start").value = "20";
     byId<HTMLInputElement>("editor-end").value = "25";
     submit(editorForm);
+    await settle();
     expect(byId("editor-status").textContent).toContain("Ya existe");
 
     byId<HTMLInputElement>("editor-start").value = "11";
@@ -204,12 +288,35 @@ describe("popup use cases", () => {
     expect((harness.memory.ytLooperLibraryV1 as StoredState).bookmarks).toHaveLength(1);
   });
 
+  it("shows canonical A/B values for legacy floating-point artifacts without a redundant write", async () => {
+    const initial = state();
+    initial.bookmarks[0]!.start = 0.1 + 0.2;
+    initial.bookmarks[0]!.end = 1.1 + 0.2;
+    const harness = await loadPopup({ available: false }, initial);
+
+    revealBookmark("saved-1");
+    document.querySelector<HTMLElement>('[data-bookmark-id="saved-1"] .tree-label')!.click();
+    expect(byId<HTMLInputElement>("editor-start").value).toBe("0.3");
+    expect(byId<HTMLInputElement>("editor-end").value).toBe("1.3");
+    submit(byId<HTMLFormElement>("editor-form"));
+    await settle();
+
+    expect(byId("editor-status").textContent).toBe("Cambios guardados.");
+    expect(harness.storageSet).not.toHaveBeenCalled();
+  });
+
   it("creates and cancels nested folders, opens loops, and safely reparents deleted contents", async () => {
     const harness = await loadPopup({ available: false });
+    expect(document.querySelector('[data-bookmark-id="saved-1"]')).toBeNull();
     const songsLabel = [...document.querySelectorAll<HTMLElement>(".folder-row")]
       .find((row) => row.dataset.folderId === "songs")!
       .querySelector<HTMLButtonElement>(".tree-label")!;
     songsLabel.click();
+    expect(document.querySelector('[data-bookmark-id="saved-1"]')).not.toBeNull();
+    [...document.querySelectorAll<HTMLElement>(".folder-row")]
+      .find((row) => row.dataset.folderId === "songs")!
+      .querySelector<HTMLButtonElement>(".tree-label")!
+      .click();
     expect(document.querySelector('[data-bookmark-id="saved-1"]')).toBeNull();
     [...document.querySelectorAll<HTMLElement>(".folder-row")]
       .find((row) => row.dataset.folderId === "songs")!
@@ -222,6 +329,7 @@ describe("popup use cases", () => {
     let form = document.querySelector<HTMLFormElement>(".subfolder-form")!;
     submit(form);
     expect(document.querySelector(".subfolder-form")).not.toBeNull();
+    await settle();
     form.querySelector<HTMLInputElement>("input")!.value = "Practice";
     submit(form);
     await settle();
@@ -249,6 +357,10 @@ describe("popup use cases", () => {
       .find((row) => row.dataset.folderId === "songs")!
       .querySelectorAll<HTMLButtonElement>(".tree-actions button")[1]!;
     songsRemove.click();
+    [...document.querySelectorAll<HTMLElement>(".folder-row")]
+      .find((row) => row.dataset.folderId === "songs")!
+      .querySelectorAll<HTMLButtonElement>(".tree-actions button")[1]!
+      .click();
     await settle();
     const library = harness.memory.ytLooperLibraryV1 as StoredState;
     expect(library.folders.find((folder) => folder.id === "solos")?.parentId).toBeNull();
@@ -257,6 +369,7 @@ describe("popup use cases", () => {
 
   it("moves a loop by pointer drag and ignores cancelled or irrelevant gestures", async () => {
     const harness = await loadPopup({ available: false });
+    revealBookmark("saved-2");
     const row = document.querySelector<HTMLElement>('[data-bookmark-id="saved-2"]')!;
     const root = document.querySelector<HTMLElement>('.folder-row[data-folder-id=""]')!;
     Object.defineProperty(document, "elementFromPoint", {
@@ -319,6 +432,60 @@ describe("popup use cases", () => {
     );
   });
 
+  it("refreshes an open popup after another tab changes the library", async () => {
+    const harness = await loadPopup({ available: false });
+    expect(byId("bookmark-count").textContent).toBe("2 fragmentos");
+
+    const updated = state();
+    updated.bookmarks.push(bookmark("external", "From another window", 30, 35));
+    harness.memory.ytLooperLibraryV1 = {
+      version: 1,
+      folders: updated.folders,
+      bookmarks: updated.bookmarks
+    };
+    harness.storageListeners[0]?.({ ytLooperLibraryV1: { newValue: true } }, "local");
+    await settle();
+
+    expect(byId("bookmark-count").textContent).toBe("3 fragmentos");
+    expect(document.querySelector(".tree")?.textContent).toContain("From another window");
+    window.dispatchEvent(new Event("pagehide"));
+    expect(harness.storageListeners).toHaveLength(0);
+  });
+
+  it("preserves remote folder and parameter changes when a stale editor only renames", async () => {
+    const harness = await loadPopup({ available: false });
+    revealBookmark("saved-1");
+    document.querySelector<HTMLElement>('[data-bookmark-id="saved-1"] .tree-label')!.click();
+    byId<HTMLInputElement>("editor-name").value = "Renamed locally";
+
+    const updated = state();
+    const remoteBookmark = updated.bookmarks.find((item) => item.id === "saved-1")!;
+    remoteBookmark.folderId = "solos";
+    remoteBookmark.start = 12;
+    remoteBookmark.end = 18;
+    remoteBookmark.rate = 0.75;
+    harness.memory.ytLooperLibraryV1 = {
+      version: 1,
+      folders: updated.folders,
+      bookmarks: updated.bookmarks
+    };
+    harness.storageListeners[0]?.({ ytLooperLibraryV1: { newValue: true } }, "local");
+    await settle();
+
+    submit(byId<HTMLFormElement>("editor-form"));
+    await settle();
+    const saved = (harness.memory.ytLooperLibraryV1 as StoredState).bookmarks.find(
+      (item) => item.id === "saved-1"
+    );
+    expect(saved).toMatchObject({
+      name: "Renamed locally",
+      folderId: "solos",
+      start: 12,
+      end: 18,
+      rate: 0.75
+    });
+  });
+
   it("saves a new current loop through the review modal", async () => {
     const initial = state();
     const harness = await loadPopup(
@@ -342,6 +509,7 @@ describe("popup use cases", () => {
     byId<HTMLInputElement>("editor-name").value = "   ";
     submit(byId<HTMLFormElement>("editor-form"));
     expect(byId("editor-modal").hidden).toBe(false);
+    await settle();
     byId<HTMLInputElement>("editor-name").value = "Outro practice";
     byId<HTMLSelectElement>("editor-folder").value = "songs";
     submit(byId<HTMLFormElement>("editor-form"));
@@ -393,7 +561,7 @@ describe("popup use cases", () => {
     byId<HTMLButtonElement>("current-bookmark-action").click();
     await settle();
     expect(byId("save-status").textContent).toContain("Ya existe");
-    expect(duplicateHarness.memory.ytLooperLibraryV1).toBeUndefined();
+    expect(duplicateHarness.storageSet).not.toHaveBeenCalled();
   });
 
   it("keeps the library useful when no content script or valid loop is available", async () => {
@@ -439,6 +607,22 @@ describe("popup use cases", () => {
     await settle();
     expect(byId("save-status").textContent).toBe("No se pudo copiar el enlace.");
     expect(byId("save-status").dataset.error).toBe("true");
+  });
+
+  it("reports storage mutation failures in the modal and keeps the library intact", async () => {
+    const warning = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const harness = await loadPopup({ available: false });
+    revealBookmark("saved-1");
+    document.querySelector<HTMLElement>('[data-bookmark-id="saved-1"] .tree-label')!.click();
+    byId<HTMLInputElement>("editor-name").value = "Should not persist";
+    harness.storageSet.mockRejectedValueOnce(new Error("quota exceeded"));
+
+    submit(byId<HTMLFormElement>("editor-form"));
+    await settle();
+    expect(byId("editor-status").textContent).toContain("No se pudo completar");
+    expect(byId("editor-status").dataset.error).toBe("true");
+    expect((harness.memory.ytLooperStateV3 as StoredState).bookmarks[0]?.name).toBe("Chorus");
+    expect(warning).toHaveBeenCalled();
   });
 
   it("initializes safely without extension APIs and fails fast on malformed markup", async () => {

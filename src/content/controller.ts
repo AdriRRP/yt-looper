@@ -1,15 +1,18 @@
 import { LoopEngine, MIN_LOOP_SECONDS, type LoopValidation } from "../core/loop-engine";
-import {
-  addBookmark,
-  bookmarkMatchesParameters,
-  findEquivalentBookmark
-} from "../library/bookmarks";
+import { bookmarkMatchesParameters, findEquivalentBookmark } from "../library/bookmarks";
 import { createDefaultBookmarkName } from "../library/bookmark-names";
 import { t } from "../platform/i18n";
 import { copyText } from "../platform/clipboard";
-import { loadStoredState, updateStoredState, type StoredState } from "../platform/storage";
+import {
+  applyStorageChanges,
+  loadStoredState,
+  type StorageChanges,
+  type StoredState
+} from "../platform/storage";
+import { mutateStoredState, type StorageMutation } from "../platform/storage-coordinator";
 import {
   findYouTubeContext,
+  getVideoIdFromUrl,
   isAdPlaying,
   observeYouTubeNavigation,
   type YouTubeContext
@@ -58,7 +61,11 @@ export class YtLooperController {
   #stopNavigationObserver: (() => void) | null = null;
   #linkedBookmarkId: string | null = null;
   #detachedBookmarkId: string | null = null;
+  #explicitRequestUrl: string | null = null;
   readonly #dismissedVideoIds = new Set<string>();
+  readonly #pendingRuntimeMutations = new Map<string, StorageMutation>();
+  #runtimeMutationTimer: number | null = null;
+  #stateLoadSequence = 0;
   #destroyed = false;
 
   async start(): Promise<void> {
@@ -81,7 +88,29 @@ export class YtLooperController {
       return;
     }
     const capturedRequestUrl = peekCapturedLoopRequestUrl();
-    const requestUrl = capturedRequestUrl ?? location.href;
+    const capturedRequestKey = capturedRequestUrl ? getLoopRequestKey(capturedRequestUrl) : "|";
+    if (
+      capturedRequestUrl &&
+      getVideoIdFromUrl(capturedRequestUrl) === context.videoId &&
+      (capturedRequestKey !== this.#active?.requestKey || this.#explicitRequestUrl !== null)
+    ) {
+      this.#explicitRequestUrl = capturedRequestUrl;
+      consumeCapturedLoopRequestUrl();
+    } else if (
+      getLoopRequestKey(location.href) !== "|" &&
+      (getLoopRequestKey(location.href) !== this.#active?.requestKey ||
+        this.#explicitRequestUrl !== null) &&
+      getVideoIdFromUrl(location.href) === context.videoId
+    ) {
+      this.#explicitRequestUrl = location.href;
+    }
+    if (
+      this.#explicitRequestUrl &&
+      getVideoIdFromUrl(this.#explicitRequestUrl) !== context.videoId
+    ) {
+      this.#explicitRequestUrl = null;
+    }
+    const requestUrl = this.#explicitRequestUrl ?? location.href;
     const requestKey = getLoopRequestKey(requestUrl);
     const hasExplicitRequest = requestKey !== "|";
     if (
@@ -89,12 +118,9 @@ export class YtLooperController {
       this.#active.videoId === context.videoId &&
       (!hasExplicitRequest || this.#active.requestKey === requestKey)
     ) {
-      if (capturedRequestUrl && this.#active.requestKey === requestKey) {
-        consumeCapturedLoopRequestUrl();
-      }
       return;
     }
-    this.#attach(context, requestKey, capturedRequestUrl);
+    this.#attach(context, requestKey, requestUrl);
   }
 
   getCurrentLoop(): CurrentLoopSnapshot {
@@ -136,12 +162,31 @@ export class YtLooperController {
   }
 
   async reloadStoredState(): Promise<void> {
-    this.#storedState = await loadStoredState();
+    const sequence = ++this.#stateLoadSequence;
+    const state = await loadStoredState();
+    if (sequence !== this.#stateLoadSequence || this.#destroyed) {
+      return;
+    }
+    this.#storedState = state;
     this.#active?.render();
+  }
+
+  applyStoredStateChanges(changes: StorageChanges): void {
+    if (!this.#storedState || this.#destroyed) {
+      return;
+    }
+    this.#stateLoadSequence += 1;
+    this.#storedState = applyStorageChanges(this.#storedState, changes);
+    this.#active?.render();
+  }
+
+  flushPendingState(): void {
+    this.#flushRuntimeMutations();
   }
 
   destroy(): void {
     this.#destroyed = true;
+    this.#flushRuntimeMutations();
     this.#detach();
     this.#detachedBookmarkId = null;
     this.#stopNavigationObserver?.();
@@ -149,7 +194,7 @@ export class YtLooperController {
     document.removeEventListener("keydown", this.#onKeyDown);
   }
 
-  #attach(context: YouTubeContext, requestKey: string, capturedRequestUrl: string | null): void {
+  #attach(context: YouTubeContext, requestKey: string, requestUrl: string): void {
     this.#detach();
     const storedState = this.#storedState;
     if (!storedState) {
@@ -158,18 +203,17 @@ export class YtLooperController {
 
     const blocked = (): boolean => isAdPlaying(context.player);
     const engine = new LoopEngine(context.video, { shouldBlock: blocked });
-    const requestUrl = capturedRequestUrl ?? location.href;
     const decodedSharedLoop = readSharedLoopFromUrl(requestUrl);
     const sharedLoop = decodedSharedLoop?.i === context.videoId ? decodedSharedLoop : null;
     const requestedBookmarkId = new URL(requestUrl).searchParams.get("ytl_bookmark");
-    if (capturedRequestUrl) {
-      consumeCapturedLoopRequestUrl();
-    }
     const requestedBookmark = sharedLoop
       ? undefined
       : storedState.bookmarks.find(
           (bookmark) => bookmark.id === requestedBookmarkId && bookmark.videoId === context.videoId
         );
+    if (requestKey !== "|" && !sharedLoop && !requestedBookmark) {
+      this.#explicitRequestUrl = null;
+    }
     this.#linkedBookmarkId = requestedBookmark?.id ?? null;
     const initialLoop = selectInitialLoop(
       sharedLoop,
@@ -244,20 +288,23 @@ export class YtLooperController {
 
     const persistLoop = (): void => {
       const state = engine.state;
-      this.#mutateStoredState((latestState) => {
-        if (state.start !== null && state.end !== null && engine.validation().valid) {
-          latestState.loops[context.videoId] = { start: state.start, end: state.end };
-        } else {
-          delete latestState.loops[context.videoId];
-        }
+      this.#scheduleRuntimeMutation({
+        operation: "set-loop",
+        videoId: context.videoId,
+        loop:
+          state.start !== null && state.end !== null && engine.validation().valid
+            ? { start: state.start, end: state.end }
+            : null
       });
     };
     const setStart = (value: number | null): void => {
+      this.#clearExplicitRequest();
       engine.setStart(value);
       persistLoop();
       render();
     };
     const setEnd = (value: number | null): void => {
+      this.#clearExplicitRequest();
       engine.setEnd(value);
       persistLoop();
       render();
@@ -277,10 +324,9 @@ export class YtLooperController {
       adjustStart: (delta) => setStart((engine.state.start ?? context.video.currentTime) + delta),
       adjustEnd: (delta) => setEnd((engine.state.end ?? context.video.currentTime) + delta),
       setRate: (rate) => {
+        this.#clearExplicitRequest();
         const appliedRate = engine.setRate(rate);
-        this.#mutateStoredState((latestState) => {
-          latestState.settings.rate = appliedRate;
-        });
+        this.#scheduleRuntimeMutation({ operation: "set-rate", rate: appliedRate });
         render();
         panel.showMessage(t("speedSet", [String(appliedRate)]));
       },
@@ -305,6 +351,7 @@ export class YtLooperController {
         }
         this.#detachedBookmarkId = this.#linkedBookmarkId;
         this.#linkedBookmarkId = null;
+        this.#clearExplicitRequest();
         render();
         panel.showMessage(t("bookmarkDetached"));
       },
@@ -326,34 +373,24 @@ export class YtLooperController {
         if (loopState.start === null || loopState.end === null || !engine.validation().valid) {
           return false;
         }
-        let savedBookmarkId: string | null = null;
-        const latestState = await updateStoredState((state) => {
-          if (
-            findEquivalentBookmark(state, {
-              videoId: context.videoId,
-              start: loopState.start!,
-              end: loopState.end!,
-              rate: loopState.rate
-            })
-          ) {
-            return;
-          }
-          const bookmark = addBookmark(state, {
+        const result = await mutateStoredState({
+          operation: "create-bookmark",
+          input: {
             name: createDefaultBookmarkName(
               this.#videoTitle() || t("fragmentDefault"),
-              loopState.start!,
-              loopState.end!
+              loopState.start,
+              loopState.end
             ),
             folderId: null,
             videoId: context.videoId,
             videoTitle: this.#videoTitle(),
-            start: loopState.start!,
-            end: loopState.end!,
+            start: loopState.start,
+            end: loopState.end,
             rate: loopState.rate
-          });
-          savedBookmarkId = bookmark.id;
+          }
         });
-        this.#storedState = latestState;
+        this.#storedState = result.state;
+        const savedBookmarkId = result.status === "created" ? (result.entityId ?? null) : null;
         if (savedBookmarkId) {
           this.#linkedBookmarkId = savedBookmarkId;
           this.#detachedBookmarkId = null;
@@ -372,38 +409,25 @@ export class YtLooperController {
         ) {
           return "missing";
         }
-        let result: "updated" | "duplicate" | "missing" = "missing";
-        const latestState = await updateStoredState((state) => {
-          const bookmark = state.bookmarks.find((candidate) => candidate.id === bookmarkId);
-          if (!bookmark) {
-            return;
+        const result = await mutateStoredState({
+          operation: "update-bookmark-parameters",
+          bookmarkId,
+          parameters: {
+            start: loopState.start,
+            end: loopState.end,
+            rate: loopState.rate
           }
-          if (
-            findEquivalentBookmark(
-              state,
-              {
-                videoId: context.videoId,
-                start: loopState.start!,
-                end: loopState.end!,
-                rate: loopState.rate
-              },
-              bookmarkId
-            )
-          ) {
-            result = "duplicate";
-            return;
-          }
-          bookmark.start = loopState.start!;
-          bookmark.end = loopState.end!;
-          bookmark.rate = loopState.rate;
-          result = "updated";
         });
-        this.#storedState = latestState;
-        if (result === "missing") {
+        this.#storedState = result.state;
+        if (result.status === "missing") {
           this.#linkedBookmarkId = null;
         }
         render();
-        return result;
+        return result.status === "duplicate"
+          ? "duplicate"
+          : result.status === "missing"
+            ? "missing"
+            : "updated";
       }
     };
 
@@ -416,25 +440,34 @@ export class YtLooperController {
       if (blocked() || Math.abs(context.video.playbackRate - engine.state.rate) < 0.001) {
         return;
       }
+      this.#clearExplicitRequest();
       const appliedRate = engine.setRate(context.video.playbackRate);
-      this.#mutateStoredState((latestState) => {
-        latestState.settings.rate = appliedRate;
-      });
+      this.#scheduleRuntimeMutation({ operation: "set-rate", rate: appliedRate });
       render();
     };
-    let bookmarkActivated = false;
-    const onLoadedMetadata = (): void => {
-      const sharedLoopInRange =
-        !sharedLoop || sharedLoopFitsDuration(sharedLoop, context.video.duration);
-      if (initialLoop && sharedLoopInRange) {
+    let requestHandled = false;
+    const applyLoadedMetadata = (rejectOutOfRange: boolean): void => {
+      if ((requestedBookmark || sharedLoop) && blocked()) {
+        render();
+        return;
+      }
+      const requestedLoopInRange =
+        (!requestedBookmark && !sharedLoop) ||
+        !initialLoop ||
+        sharedLoopFitsDuration({ b: initialLoop.end }, context.video.duration);
+      if (!requestedLoopInRange && !rejectOutOfRange) {
+        render();
+        return;
+      }
+      if (initialLoop && requestedLoopInRange) {
         engine.setSegment(initialLoop.start, initialLoop.end);
-      } else if (!sharedLoopInRange) {
+      } else if (!requestedLoopInRange) {
         engine.setSegment(null, null);
       }
       engine.applyPlaybackSettings();
-      if ((requestedBookmark || sharedLoop) && !bookmarkActivated) {
-        bookmarkActivated = true;
-        if (!sharedLoopInRange) {
+      if ((requestedBookmark || sharedLoop) && !requestHandled) {
+        requestHandled = true;
+        if (!requestedLoopInRange) {
           panel.showMessage(t("validationOutOfRange"), true);
         } else {
           context.video.currentTime = sharedLoop?.a ?? requestedBookmark!.start;
@@ -451,6 +484,7 @@ export class YtLooperController {
       }
       render();
     };
+    const onLoadedMetadata = (): void => applyLoadedMetadata(true);
     context.video.addEventListener("ratechange", onRateChange);
     context.video.addEventListener("loadedmetadata", onLoadedMetadata);
 
@@ -458,7 +492,7 @@ export class YtLooperController {
     const adObserver = new MutationObserver(() => {
       const adPlaying = blocked();
       if (wasAdPlaying && !adPlaying) {
-        engine.applyPlaybackSettings();
+        applyLoadedMetadata(false);
         panel.showMessage(t("loopReady"));
       }
       wasAdPlaying = adPlaying;
@@ -485,6 +519,7 @@ export class YtLooperController {
   }
 
   #detach(): void {
+    this.#flushRuntimeMutations();
     const active = this.#active;
     if (!active) {
       return;
@@ -514,10 +549,12 @@ export class YtLooperController {
 
     if (event.code === "KeyA") {
       event.preventDefault();
+      this.#clearExplicitRequest();
       this.#active.panel.showMessage(t("pointAMarked"));
       this.#active.engine.setStart(this.#active.video.currentTime);
     } else if (event.code === "KeyB") {
       event.preventDefault();
+      this.#clearExplicitRequest();
       this.#active.panel.showMessage(t("pointBMarked"));
       this.#active.engine.setEnd(this.#active.video.currentTime);
     } else if (event.code === "KeyL") {
@@ -538,17 +575,71 @@ export class YtLooperController {
     this.#active.render();
     if (state.start !== null && state.end !== null && this.#active.engine.validation().valid) {
       const videoId = this.#active.videoId;
-      this.#mutateStoredState((latestState) => {
-        latestState.loops[videoId] = { start: state.start!, end: state.end! };
+      this.#scheduleRuntimeMutation({
+        operation: "set-loop",
+        videoId,
+        loop: { start: state.start, end: state.end }
       });
     }
   };
 
-  #mutateStoredState(mutator: (state: StoredState) => void): void {
-    void updateStoredState(mutator).then((state) => {
-      this.#storedState = state;
-      this.#active?.render();
-    });
+  #scheduleRuntimeMutation(mutation: StorageMutation): void {
+    const key = mutation.operation === "set-loop" ? `loop:${mutation.videoId}` : mutation.operation;
+    if (this.#storedState) {
+      if (mutation.operation === "set-loop") {
+        if (mutation.loop) {
+          this.#storedState.loops[mutation.videoId] = mutation.loop;
+        } else {
+          delete this.#storedState.loops[mutation.videoId];
+        }
+      } else if (mutation.operation === "set-rate") {
+        this.#storedState.settings.rate = mutation.rate;
+      }
+    }
+    this.#pendingRuntimeMutations.set(key, mutation);
+    if (document.visibilityState === "hidden") {
+      this.#flushRuntimeMutations();
+      return;
+    }
+    if (this.#runtimeMutationTimer !== null) {
+      window.clearTimeout(this.#runtimeMutationTimer);
+    }
+    this.#runtimeMutationTimer = window.setTimeout(() => this.#flushRuntimeMutations(), 180);
+  }
+
+  #flushRuntimeMutations(): void {
+    if (this.#runtimeMutationTimer !== null) {
+      window.clearTimeout(this.#runtimeMutationTimer);
+      this.#runtimeMutationTimer = null;
+    }
+    const mutations = [...this.#pendingRuntimeMutations.values()];
+    this.#pendingRuntimeMutations.clear();
+    for (const mutation of mutations) {
+      this.#commitRuntimeMutation(mutation);
+    }
+  }
+
+  #commitRuntimeMutation(mutation: StorageMutation): void {
+    void mutateStoredState(mutation).then(
+      (result) => {
+        if (this.#storedState) {
+          this.#storedState = {
+            ...this.#storedState,
+            settings: result.state.settings,
+            loops: result.state.loops
+          };
+        }
+        this.#active?.render();
+      },
+      (error: unknown) => {
+        console.warn("YT Looper could not update its saved state.", error);
+        this.#active?.panel.showMessage(t("operationFailed"), true);
+      }
+    );
+  }
+
+  #clearExplicitRequest(): void {
+    this.#explicitRequestUrl = null;
   }
 
   #videoTitle(): string {

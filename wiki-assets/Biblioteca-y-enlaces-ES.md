@@ -56,12 +56,13 @@ una URL canónica de YouTube con un payload Base64URL validado.
 El enlace contiene únicamente:
 
 - Versión del formato.
-- Identificador del vídeo.
 - Punto A.
 - Punto B.
 - Velocidad.
 
-No contiene el nombre ni la carpeta, y no sube el loop a ningún servidor. Al abrirlo con YT Looper
+El identificador del vídeo ya está en el parámetro normal `v` de YouTube, fuera del payload. No
+contiene el nombre ni la carpeta, y no sube el loop a ningún servidor. Los enlaces antiguos que
+también incluían el identificador dentro del payload continúan funcionando. Al abrirlo con YT Looper
 instalado, la extensión valida los datos, salta a A y activa el loop. El receptor puede reproducirlo
 sin guardarlo o añadirlo a su propia biblioteca con el nombre que prefiera. Sin la extensión, el
 enlace continúa abriendo el vídeo normal de YouTube cerca del inicio del fragmento.

@@ -3,6 +3,10 @@
 YT Looper ships a desktop Safari Manifest V3 build that shares its TypeScript, popup, content
 scripts, storage format, localization and tests with Firefox and Chrome.
 
+Safari's Manifest V3 package declares the coordinator with `background.scripts`. Safari treats MV3
+background pages as nonpersistent, and this form follows Apple's Safari manifest guidance while
+keeping the same event-driven coordinator behavior as Firefox and Chrome.
+
 ## Temporary installation
 
 Build the extension:
@@ -30,6 +34,13 @@ the active developer directory, and generate a macOS-only Swift project:
 ```bash
 sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
 npm run safari:project -- --bundle-id=com.example.ytlooper
+```
+
+After the project exists, preserve its signing and Xcode settings while refreshing only the built
+extension resources with:
+
+```bash
+npm run safari:sync
 ```
 
 Replace `com.example.ytlooper` with a bundle identifier belonging to the selected Apple Developer

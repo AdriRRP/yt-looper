@@ -6,6 +6,7 @@ const browsers = ["firefox", "chrome", "safari"];
 const perFileBudgets = {
   "content.js": 80_000,
   "popup.js": 60_000,
+  "background.js": 25_000,
   "early.js": 5_000,
   "popup.css": 15_000,
   "popup.html": 8_000

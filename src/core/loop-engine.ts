@@ -1,6 +1,8 @@
 export const MIN_LOOP_SECONDS = 0.05;
 export const MIN_PLAYBACK_RATE = 0.25;
 export const MAX_PLAYBACK_RATE = 4;
+export const MAX_LOOP_TIME_SECONDS = 31_536_000;
+const LOOP_TIME_PRECISION = 1000;
 
 export interface LoopMedia extends EventTarget {
   currentTime: number;
@@ -38,6 +40,16 @@ export function clampRate(rate: number): number {
   return Math.min(MAX_PLAYBACK_RATE, Math.max(MIN_PLAYBACK_RATE, rate));
 }
 
+export function normalizeLoopTime(time: number): number {
+  if (!Number.isFinite(time)) {
+    return time;
+  }
+  if (Math.abs(time) > MAX_LOOP_TIME_SECONDS) {
+    return time;
+  }
+  return Math.round((time + Number.EPSILON) * LOOP_TIME_PRECISION) / LOOP_TIME_PRECISION;
+}
+
 export function validateSegment(
   start: number | null,
   end: number | null,
@@ -47,7 +59,13 @@ export function validateSegment(
     return { valid: false, reason: "missing" };
   }
 
-  if (!Number.isFinite(start) || !Number.isFinite(end) || start < 0) {
+  if (
+    !Number.isFinite(start) ||
+    !Number.isFinite(end) ||
+    start < 0 ||
+    start > MAX_LOOP_TIME_SECONDS ||
+    end > MAX_LOOP_TIME_SECONDS
+  ) {
     return { valid: false, reason: "invalid" };
   }
 
@@ -189,7 +207,7 @@ export class LoopEngine {
 
     const duration = this.#media.duration;
     const upperBound = Number.isFinite(duration) ? duration : Number.POSITIVE_INFINITY;
-    return Math.min(upperBound, Math.max(0, value));
+    return Math.min(upperBound, normalizeLoopTime(Math.max(0, value)));
   }
 
   #disableIfInvalid(): void {

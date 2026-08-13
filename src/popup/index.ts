@@ -1,28 +1,31 @@
-import { MIN_LOOP_SECONDS, clampRate } from "../core/loop-engine";
+import {
+  MAX_LOOP_TIME_SECONDS,
+  MIN_LOOP_SECONDS,
+  clampRate,
+  normalizeLoopTime,
+  validateSegment
+} from "../core/loop-engine";
 import type { CurrentLoopSnapshot } from "../content/controller";
 import { createDefaultBookmarkName, formatLoopTime } from "../library/bookmark-names";
 import {
-  addBookmark,
-  addFolder,
   bookmarkMatchesParameters,
   buildBookmarkUrl,
-  deleteBookmark,
-  deleteFolder,
-  findEquivalentBookmark,
   resolveBookmarkForLoop,
-  updateBookmark
+  type BookmarkChanges,
+  type BookmarkPatch
 } from "../library/bookmarks";
 import { localizeDocument, t } from "../platform/i18n";
 import { copyText } from "../platform/clipboard";
 import { buildSharedLoopUrl } from "../sharing/loop-links";
 import {
   createDefaultState,
-  loadStoredState,
-  updateStoredState,
+  LIBRARY_STORAGE_KEY,
+  loadStoredStateOrThrow,
   type StoredBookmark,
   type StoredFolder,
   type StoredState
 } from "../platform/storage";
+import { mutateStoredState } from "../platform/storage-coordinator";
 
 interface BrowserTab {
   id?: number;
@@ -33,9 +36,18 @@ interface PopupExtensionApi {
     sendMessage(tabId: number, message: unknown): Promise<unknown>;
     create(properties: { url: string }): Promise<BrowserTab>;
   };
+  storage?: {
+    onChanged?: {
+      addListener(listener: (changes: Record<string, unknown>, areaName: string) => void): void;
+      removeListener(listener: (changes: Record<string, unknown>, areaName: string) => void): void;
+    };
+  };
 }
 
 const ROOT_ID = "__root__";
+const ACTIVE_TAB_TIMEOUT_MS = 1500;
+const STORAGE_TIMEOUT_MS = 1500;
+const POPUP_OPERATION_TIMEOUT_MS = 6500;
 const extensionGlobal = globalThis as typeof globalThis & {
   browser?: PopupExtensionApi;
   chrome?: PopupExtensionApi;
@@ -43,6 +55,8 @@ const extensionGlobal = globalThis as typeof globalThis & {
 const extensionApi = extensionGlobal.browser ?? extensionGlobal.chrome;
 
 const currentCard = element<HTMLElement>("current-card");
+const appHeader = document.querySelector<HTMLElement>(".app-header")!;
+const appMain = document.querySelector<HTMLElement>("main")!;
 const currentSummary = element<HTMLParagraphElement>("current-summary");
 const showWidgetButton = element<HTMLButtonElement>("show-widget");
 const shareCurrentButton = element<HTMLButtonElement>("share-current");
@@ -59,6 +73,7 @@ const updateCurrentGlyph = element<SVGElement>("update-current-glyph");
 const currentParametersGlyph = element<SVGElement>("current-parameters-glyph");
 const libraryTree = element<HTMLDivElement>("library-tree");
 const bookmarkCount = element<HTMLSpanElement>("bookmark-count");
+const libraryStatus = element<HTMLParagraphElement>("library-status");
 const editorModal = element<HTMLElement>("editor-modal");
 const editorSheet = element<HTMLElement>("editor-sheet");
 const modalBackdrop = element<HTMLButtonElement>("modal-backdrop");
@@ -74,6 +89,7 @@ const editorStatus = element<HTMLParagraphElement>("editor-status");
 const closeEditor = element<HTMLButtonElement>("close-editor");
 const deleteBookmarkButton = element<HTMLButtonElement>("delete-bookmark");
 const openBookmarkButton = element<HTMLButtonElement>("open-bookmark");
+const submitEditorButton = element<HTMLButtonElement>("submit-editor");
 const submitEditorLabel = element<HTMLElement>("submit-editor-label");
 const editorSubmitMark = element<SVGPathElement>("editor-submit-mark");
 
@@ -83,31 +99,101 @@ let activeTabId: number | null = null;
 let selectedBookmarkId: string | null = null;
 let creatingParentId: string | null | undefined;
 let editorMode: "create" | "edit" | null = null;
+let editorBaseline: BookmarkChanges | null = null;
 let modalCloseTimer: number | null = null;
+let storageLoadSequence = 0;
+let pendingFolderDeleteId: string | null = null;
+let modalReturnFocus: HTMLElement | null = null;
 const expandedFolderIds = new Set<string>([ROOT_ID]);
+const pendingPopupActions = new Set<string>();
 
 export const popupReady = initialize();
 
 async function initialize(): Promise<void> {
   localizeDocument();
-  storedState = await loadStoredState();
-  for (const folder of storedState.folders) {
-    expandedFolderIds.add(folder.id);
-  }
-  const current = await getCurrentLoop();
+  render();
+  attachEventListeners();
+  const [, current] = await Promise.all([refreshStoredState(), getCurrentLoop()]);
   currentLoop = current.snapshot;
   activeTabId = current.tabId;
   render();
+}
+
+function attachEventListeners(): void {
   currentBadge.addEventListener("click", onCurrentBadgeClick);
   currentBookmarkAction.addEventListener("click", onCurrentActionClick);
   editorForm.addEventListener("submit", onSubmitEditor);
+  editorName.addEventListener("invalid", (event) => {
+    event.preventDefault();
+    showEditorValidation("invalidEditorName");
+  });
+  for (const input of [editorStart, editorEnd]) {
+    input.addEventListener("invalid", (event) => {
+      event.preventDefault();
+      showEditorValidation("invalidEditorBounds", [String(MAX_LOOP_TIME_SECONDS)]);
+    });
+  }
+  editorRate.addEventListener("invalid", (event) => {
+    event.preventDefault();
+    showEditorValidation("invalidEditorRate");
+  });
   closeEditor.addEventListener("click", closeModal);
   modalBackdrop.addEventListener("click", closeModal);
   deleteBookmarkButton.addEventListener("click", onDeleteSelectedBookmark);
-  openBookmarkButton.addEventListener("click", () => void openSelectedBookmark());
-  showWidgetButton.addEventListener("click", () => void showVideoWidget());
-  shareCurrentButton.addEventListener("click", () => void shareCurrentLoop());
+  openBookmarkButton.addEventListener("click", () =>
+    runPopupAction(openSelectedBookmark, editorStatus)
+  );
+  showWidgetButton.addEventListener("click", () => runPopupAction(showVideoWidget, saveStatus));
+  shareCurrentButton.addEventListener("click", () => runPopupAction(shareCurrentLoop, saveStatus));
   document.addEventListener("keydown", onDocumentKeyDown);
+  extensionApi?.storage?.onChanged?.addListener(onStorageChanged);
+  window.addEventListener("pagehide", () => {
+    extensionApi?.storage?.onChanged?.removeListener(onStorageChanged);
+  });
+}
+
+function onStorageChanged(changes: Record<string, unknown>, areaName: string): void {
+  if (areaName !== "local" || !(LIBRARY_STORAGE_KEY in changes)) {
+    return;
+  }
+  runPopupAction(refreshStoredState, libraryStatus);
+}
+
+async function refreshStoredState(): Promise<void> {
+  const sequence = ++storageLoadSequence;
+  const request = loadStoredStateOrThrow();
+  try {
+    const latestState = await withTimeout(request, STORAGE_TIMEOUT_MS);
+    applyLatestStoredState(latestState, sequence);
+  } catch (error) {
+    if (sequence === storageLoadSequence) {
+      showPopupError(libraryStatus, error, "libraryLoadFailed");
+    }
+    void request.then(
+      (latestState) => applyLatestStoredState(latestState, sequence),
+      () => undefined
+    );
+  }
+}
+
+function applyLatestStoredState(latestState: StoredState, sequence: number): void {
+  if (sequence !== storageLoadSequence) {
+    return;
+  }
+  storedState = latestState;
+  if (
+    pendingFolderDeleteId &&
+    !storedState.folders.some((folder) => folder.id === pendingFolderDeleteId)
+  ) {
+    pendingFolderDeleteId = null;
+  }
+  libraryStatus.textContent = "";
+  libraryStatus.dataset.error = "false";
+  if (selectedBookmarkId && !selectedBookmark()) {
+    closeModal();
+  }
+  renderTree();
+  renderCurrentLoop();
 }
 
 async function getCurrentLoop(): Promise<{ snapshot: CurrentLoopSnapshot; tabId: number | null }> {
@@ -115,17 +201,96 @@ async function getCurrentLoop(): Promise<{ snapshot: CurrentLoopSnapshot; tabId:
     return { snapshot: { available: false }, tabId: null };
   }
   try {
-    const [activeTab] = await extensionApi.tabs.query({ active: true, currentWindow: true });
+    const [activeTab] = await withTimeout(
+      extensionApi.tabs.query({ active: true, currentWindow: true }),
+      ACTIVE_TAB_TIMEOUT_MS
+    );
     if (activeTab?.id === undefined) {
       return { snapshot: { available: false }, tabId: null };
     }
-    const response = await extensionApi.tabs.sendMessage(activeTab.id, {
-      type: "get-current-loop"
-    });
+    const response = await withTimeout(
+      extensionApi.tabs.sendMessage(activeTab.id, {
+        type: "get-current-loop"
+      }),
+      ACTIVE_TAB_TIMEOUT_MS
+    );
     return { snapshot: response as CurrentLoopSnapshot, tabId: activeTab.id };
   } catch {
     return { snapshot: { available: false }, tabId: null };
   }
+}
+
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timeout = window.setTimeout(
+      () => reject(new Error("Extension message timed out.")),
+      timeoutMs
+    );
+    void promise.then(
+      (value) => {
+        window.clearTimeout(timeout);
+        resolve(value);
+      },
+      (error: unknown) => {
+        window.clearTimeout(timeout);
+        reject(error instanceof Error ? error : new Error(String(error)));
+      }
+    );
+  });
+}
+
+interface PopupActionOptions {
+  key?: string;
+  controls?: (HTMLInputElement | HTMLButtonElement | HTMLSelectElement)[];
+}
+
+function runPopupAction(
+  action: () => Promise<void>,
+  statusElement: HTMLParagraphElement,
+  options: PopupActionOptions = {}
+): void {
+  if (options.key && pendingPopupActions.has(options.key)) {
+    return;
+  }
+  const controlStates =
+    options.controls?.map((control) => [control, control.disabled] as const) ?? [];
+  if (options.key) {
+    pendingPopupActions.add(options.key);
+  }
+  for (const [control] of controlStates) {
+    control.disabled = true;
+  }
+  let actionPromise: Promise<void>;
+  try {
+    actionPromise = action();
+  } catch (error) {
+    actionPromise = Promise.reject(error instanceof Error ? error : new Error(String(error)));
+  }
+  void withTimeout(actionPromise, POPUP_OPERATION_TIMEOUT_MS)
+    .catch((error: unknown) => showPopupError(statusElement, error))
+    .finally(() => {
+      if (options.key) {
+        pendingPopupActions.delete(options.key);
+      }
+      for (const [control, wasDisabled] of controlStates) {
+        control.disabled = wasDisabled;
+      }
+    });
+}
+
+function showPopupError(
+  statusElement: HTMLParagraphElement,
+  error: unknown,
+  messageKey = "operationFailed"
+): void {
+  console.warn("YT Looper popup operation failed.", error);
+  statusElement.textContent = t(messageKey);
+  statusElement.dataset.error = "true";
+}
+
+function showEditorValidation(messageKey: string, substitutions: string[] = []): void {
+  editorStatus.textContent = t(messageKey, substitutions);
+  editorStatus.dataset.error = "true";
 }
 
 function render(): void {
@@ -219,19 +384,41 @@ function renderTree(): void {
     storedState.bookmarks.length === 1 ? "fragmentCount" : "fragmentsCount",
     [String(storedState.bookmarks.length)]
   );
-  libraryTree.append(createFolderNode(null));
+  const foldersByParent = groupByParent(storedState.folders, (folder) => folder.parentId);
+  const bookmarksByParent = groupByParent(storedState.bookmarks, (bookmark) => bookmark.folderId);
+  libraryTree.append(createFolderNode(null, foldersByParent, bookmarksByParent, new Set()));
 }
 
-function createFolderNode(folder: StoredFolder | null): HTMLElement {
+function groupByParent<T>(
+  items: T[],
+  parentId: (item: T) => string | null
+): Map<string | null, T[]> {
+  const groups = new Map<string | null, T[]>();
+  for (const item of items) {
+    const key = parentId(item);
+    const group = groups.get(key);
+    if (group) {
+      group.push(item);
+    } else {
+      groups.set(key, [item]);
+    }
+  }
+  return groups;
+}
+
+function createFolderNode(
+  folder: StoredFolder | null,
+  foldersByParent: Map<string | null, StoredFolder[]>,
+  bookmarksByParent: Map<string | null, StoredBookmark[]>,
+  ancestors: Set<string>
+): HTMLElement {
   const folderId = folder?.id ?? ROOT_ID;
   const node = document.createElement("div");
   node.className = "tree-node";
-  const childrenFolders = storedState.folders.filter(
-    (candidate) => candidate.parentId === (folder?.id ?? null)
-  );
-  const bookmarks = storedState.bookmarks.filter(
-    (bookmark) => bookmark.folderId === (folder?.id ?? null)
-  );
+  node.setAttribute("role", "listitem");
+  const parentId = folder?.id ?? null;
+  const childrenFolders = foldersByParent.get(parentId) ?? [];
+  const bookmarks = bookmarksByParent.get(parentId) ?? [];
   const hasChildren = childrenFolders.length > 0 || bookmarks.length > 0;
   const expanded = expandedFolderIds.has(folderId);
 
@@ -247,6 +434,7 @@ function createFolderNode(folder: StoredFolder | null): HTMLElement {
   );
   toggle.dataset.expanded = String(expanded);
   toggle.dataset.empty = String(!hasChildren);
+  toggle.setAttribute("aria-expanded", String(expanded));
   toggle.addEventListener("click", () => toggleFolder(folderId));
   const icon = document.createElement("span");
   icon.className = `folder-icon${folder ? "" : " root-icon"}`;
@@ -261,8 +449,26 @@ function createFolderNode(folder: StoredFolder | null): HTMLElement {
   add.addEventListener("click", () => beginFolderCreation(folder?.id ?? null));
   actions.append(add);
   if (folder) {
-    const remove = iconButton("×", t("deleteFolder", [folder.name]), "icon-button danger-icon");
-    remove.addEventListener("click", () => void removeFolder(folder.id));
+    const confirming = pendingFolderDeleteId === folder.id;
+    const remove = iconButton(
+      confirming ? "✓" : "×",
+      t(confirming ? "confirmDeleteFolder" : "deleteFolder", [folder.name]),
+      "icon-button danger-icon"
+    );
+    remove.dataset.confirm = String(confirming);
+    remove.addEventListener("click", () => {
+      if (!confirming) {
+        pendingFolderDeleteId = folder.id;
+        libraryStatus.textContent = t("confirmDeleteFolder", [folder.name]);
+        libraryStatus.dataset.error = "false";
+        renderTree();
+        return;
+      }
+      runPopupAction(() => removeFolder(folder.id), libraryStatus, {
+        key: `delete-folder:${folder.id}`,
+        controls: [remove]
+      });
+    });
     actions.append(remove);
   }
   row.append(toggle, icon, label, actions);
@@ -275,8 +481,17 @@ function createFolderNode(folder: StoredFolder | null): HTMLElement {
   if (expanded) {
     const children = document.createElement("div");
     children.className = "tree-children";
+    children.setAttribute("role", "list");
+    const nextAncestors = new Set(ancestors);
+    if (folder) {
+      nextAncestors.add(folder.id);
+    }
     for (const childFolder of childrenFolders) {
-      children.append(createFolderNode(childFolder));
+      if (!nextAncestors.has(childFolder.id)) {
+        children.append(
+          createFolderNode(childFolder, foldersByParent, bookmarksByParent, nextAncestors)
+        );
+      }
     }
     for (const bookmark of bookmarks) {
       children.append(createBookmarkNode(bookmark));
@@ -284,6 +499,7 @@ function createFolderNode(folder: StoredFolder | null): HTMLElement {
     if (!hasChildren && creatingParentId !== (folder?.id ?? null)) {
       const empty = document.createElement("div");
       empty.className = "empty-tree";
+      empty.setAttribute("role", "listitem");
       empty.textContent = t("emptyFolder");
       children.append(empty);
     }
@@ -296,6 +512,7 @@ function createBookmarkNode(bookmark: StoredBookmark): HTMLElement {
   const row = document.createElement("div");
   row.className = `tree-row bookmark-row${selectedBookmarkId === bookmark.id ? " selected" : ""}`;
   row.dataset.bookmarkId = bookmark.id;
+  row.setAttribute("role", "listitem");
   makeBookmarkDraggable(row, bookmark.id);
   const spacer = document.createElement("span");
   const icon = document.createElement("span");
@@ -317,7 +534,7 @@ function createBookmarkNode(bookmark: StoredBookmark): HTMLElement {
   const actions = document.createElement("div");
   actions.className = "tree-actions";
   const play = iconButton("▶", `${t("open")}: ${bookmark.name}`);
-  play.addEventListener("click", () => void openBookmark(bookmark));
+  play.addEventListener("click", () => runPopupAction(() => openBookmark(bookmark), libraryStatus));
   actions.append(play);
   row.append(spacer, icon, label, actions);
   return row;
@@ -353,10 +570,15 @@ function makeBookmarkDraggable(row: HTMLElement, bookmarkId: string): void {
     pointerId = null;
     dragging = false;
     if (target) {
-      void moveBookmarkToFolder(
-        bookmarkId,
-        target.dataset.folderId === "" ? null : (target.dataset.folderId ?? null),
-        target.dataset.folderName ?? t("library")
+      runPopupAction(
+        () =>
+          moveBookmarkToFolder(
+            bookmarkId,
+            target.dataset.folderId === "" ? null : (target.dataset.folderId ?? null),
+            target.dataset.folderName ?? t("library")
+          ),
+        libraryStatus,
+        { key: `move-bookmark:${bookmarkId}` }
       );
     }
   };
@@ -401,15 +623,20 @@ async function moveBookmarkToFolder(
   if (!bookmark || bookmark.folderId === folderId) {
     return;
   }
-  storedState = await updateStoredState((state) => {
-    const latestBookmark = state.bookmarks.find((candidate) => candidate.id === bookmarkId);
-    if (latestBookmark) {
-      latestBookmark.folderId = folderId;
-    }
+  const result = await mutateStoredState({
+    operation: "move-bookmark",
+    bookmarkId,
+    folderId
   });
+  storedState = result.state;
+  if (result.status === "missing") {
+    render();
+    return;
+  }
   expandAncestors(folderId);
   render();
-  editorStatus.textContent = t("movedToFolder", [folderName]);
+  libraryStatus.textContent = t("movedToFolder", [folderName]);
+  libraryStatus.dataset.error = "false";
 }
 
 function createSubfolderForm(parentId: string | null): HTMLFormElement {
@@ -430,7 +657,13 @@ function createSubfolderForm(parentId: string | null): HTMLFormElement {
     renderTree();
   });
   form.append(input, confirm, cancel);
-  form.addEventListener("submit", (event) => void createSubfolder(event, parentId, input.value));
+  form.addEventListener("submit", (event) => {
+    event.preventDefault();
+    runPopupAction(() => createSubfolder(parentId, input.value), libraryStatus, {
+      key: `create-folder:${parentId ?? ROOT_ID}`,
+      controls: [input, confirm, cancel]
+    });
+  });
   queueMicrotask(() => input.focus());
   return form;
 }
@@ -442,6 +675,7 @@ function renderEditor(): void {
   deleteBookmarkButton.replaceChildren(createTrashGlyph(), document.createTextNode(t("delete")));
   deleteBookmarkButton.dataset.confirm = "false";
   if (editorMode === "create") {
+    editorBaseline = null;
     if (!currentLoop.valid || currentLoop.start === undefined || currentLoop.end === undefined) {
       closeModal();
       return;
@@ -453,8 +687,8 @@ function renderEditor(): void {
       currentLoop.start,
       currentLoop.end
     );
-    editorStart.value = String(currentLoop.start);
-    editorEnd.value = String(currentLoop.end);
+    editorStart.value = String(normalizeLoopTime(currentLoop.start));
+    editorEnd.value = String(normalizeLoopTime(currentLoop.end));
     editorRate.value = String(currentLoop.rate ?? 1);
     editorStart.readOnly = true;
     editorEnd.readOnly = true;
@@ -474,13 +708,20 @@ function renderEditor(): void {
   editorHeading.textContent = t("editFragment");
   editorKicker.textContent = t("fragmentDetails");
   editorName.value = bookmark.name;
-  editorStart.value = String(bookmark.start);
-  editorEnd.value = String(bookmark.end);
+  editorStart.value = String(normalizeLoopTime(bookmark.start));
+  editorEnd.value = String(normalizeLoopTime(bookmark.end));
   editorRate.value = String(bookmark.rate);
   editorStart.readOnly = false;
   editorEnd.readOnly = false;
   editorRate.readOnly = false;
   renderFolderSelect(editorFolder, bookmark.folderId ?? "");
+  editorBaseline = {
+    name: bookmark.name,
+    folderId: bookmark.folderId,
+    start: bookmark.start,
+    end: bookmark.end,
+    rate: bookmark.rate
+  };
   deleteBookmarkButton.hidden = false;
   openBookmarkButton.hidden = false;
   submitEditorLabel.textContent = t("saveChanges");
@@ -488,30 +729,35 @@ function renderEditor(): void {
 }
 
 function renderFolderSelect(select: HTMLSelectElement, selectedValue: string): void {
-  select.replaceChildren(option(t("rootLibrary"), ""));
-  appendFolderOptions(select, null, 0, new Set());
+  const fragment = document.createDocumentFragment();
+  fragment.append(option(t("rootLibrary"), ""));
+  const foldersByParent = groupByParent(storedState.folders, (folder) => folder.parentId);
+  const stack = [...(foldersByParent.get(null) ?? [])]
+    .reverse()
+    .map((folder) => ({ folder, depth: 1 }));
+  const visited = new Set<string>();
+  while (stack.length > 0) {
+    const entry = stack.pop();
+    if (!entry || visited.has(entry.folder.id)) {
+      continue;
+    }
+    visited.add(entry.folder.id);
+    const visibleDepth = Math.min(entry.depth, 8);
+    const depthMarker = `${"— ".repeat(visibleDepth)}${entry.depth > visibleDepth ? "… " : ""}`;
+    fragment.append(option(`${depthMarker}${entry.folder.name}`, entry.folder.id));
+    const children = foldersByParent.get(entry.folder.id) ?? [];
+    for (let index = children.length - 1; index >= 0; index -= 1) {
+      stack.push({ folder: children[index]!, depth: entry.depth + 1 });
+    }
+  }
+  select.replaceChildren(fragment);
   select.value = [...select.options].some((item) => item.value === selectedValue)
     ? selectedValue
     : "";
 }
 
-function appendFolderOptions(
-  select: HTMLSelectElement,
-  parentId: string | null,
-  depth: number,
-  visited: Set<string>
-): void {
-  for (const folder of storedState.folders.filter((candidate) => candidate.parentId === parentId)) {
-    if (visited.has(folder.id)) {
-      continue;
-    }
-    visited.add(folder.id);
-    select.append(option(`${"— ".repeat(depth + 1)}${folder.name}`, folder.id));
-    appendFolderOptions(select, folder.id, depth + 1, visited);
-  }
-}
-
 function toggleFolder(folderId: string): void {
+  pendingFolderDeleteId = null;
   if (expandedFolderIds.has(folderId)) {
     expandedFolderIds.delete(folderId);
   } else {
@@ -521,24 +767,27 @@ function toggleFolder(folderId: string): void {
 }
 
 function beginFolderCreation(parentId: string | null): void {
+  pendingFolderDeleteId = null;
   creatingParentId = parentId;
   expandedFolderIds.add(parentId ?? ROOT_ID);
   renderTree();
 }
 
-async function createSubfolder(event: Event, parentId: string | null, name: string): Promise<void> {
-  event.preventDefault();
+async function createSubfolder(parentId: string | null, name: string): Promise<void> {
   if (!name.trim()) {
     return;
   }
-  storedState = await updateStoredState((state) => addFolder(state, name, parentId));
+  const result = await mutateStoredState({ operation: "create-folder", name, parentId });
+  storedState = result.state;
   creatingParentId = undefined;
   render();
 }
 
 async function removeFolder(folderId: string): Promise<void> {
   selectedBookmarkId = null;
-  storedState = await updateStoredState((state) => deleteFolder(state, folderId));
+  const result = await mutateStoredState({ operation: "delete-folder", folderId });
+  storedState = result.state;
+  pendingFolderDeleteId = null;
   expandedFolderIds.delete(folderId);
   render();
 }
@@ -569,13 +818,17 @@ function onCurrentActionClick(): void {
   if (currentBookmarkAction.dataset.mode === "save") {
     openCreateModal();
   } else if (currentBookmarkAction.dataset.mode === "update") {
-    void onUpdateCurrentBookmark();
+    runPopupAction(onUpdateCurrentBookmark, saveStatus, {
+      key: "update-current-bookmark",
+      controls: [currentBookmarkAction]
+    });
   }
 }
 
 function openCreateModal(): void {
   editorMode = "create";
   selectedBookmarkId = null;
+  editorBaseline = null;
   showModal();
 }
 
@@ -595,6 +848,9 @@ function showModal(): void {
     modalCloseTimer = null;
   }
   renderEditor();
+  modalReturnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  appHeader.inert = true;
+  appMain.inert = true;
   editorModal.hidden = false;
   window.requestAnimationFrame(() => {
     editorModal.dataset.open = "true";
@@ -606,7 +862,19 @@ function closeModal(): void {
   delete editorModal.dataset.open;
   editorMode = null;
   selectedBookmarkId = null;
+  editorBaseline = null;
+  appHeader.inert = false;
+  appMain.inert = false;
   renderTree();
+  const returnFocus = modalReturnFocus;
+  modalReturnFocus = null;
+  queueMicrotask(() => {
+    if (returnFocus?.isConnected) {
+      returnFocus.focus();
+    } else {
+      libraryTree.querySelector<HTMLButtonElement>("button")?.focus();
+    }
+  });
   if (modalCloseTimer !== null) {
     window.clearTimeout(modalCloseTimer);
   }
@@ -620,19 +888,43 @@ function onDocumentKeyDown(event: KeyboardEvent): void {
   if (event.key === "Escape" && !editorModal.hidden) {
     event.preventDefault();
     closeModal();
+    return;
+  }
+  if (event.key === "Tab" && !editorModal.hidden) {
+    const focusable = [
+      ...editorSheet.querySelectorAll<HTMLElement>("button, input, select")
+    ].filter((item) => !item.hasAttribute("disabled") && !item.hidden && item.tabIndex !== -1);
+    const first = focusable[0];
+    const last = focusable.at(-1);
+    if (!first || !last) {
+      return;
+    }
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
   }
 }
 
 function onSubmitEditor(event: SubmitEvent): void {
+  event.preventDefault();
   if (editorMode === "create") {
-    void onSaveBookmark(event);
+    runPopupAction(onSaveBookmark, editorStatus, {
+      key: "editor-submit",
+      controls: [submitEditorButton]
+    });
   } else {
-    void onUpdateBookmark(event);
+    runPopupAction(onUpdateBookmark, editorStatus, {
+      key: "editor-submit",
+      controls: [submitEditorButton]
+    });
   }
 }
 
-async function onSaveBookmark(event: SubmitEvent): Promise<void> {
-  event.preventDefault();
+async function onSaveBookmark(): Promise<void> {
   if (
     !currentLoop.valid ||
     !currentLoop.videoId ||
@@ -645,34 +937,25 @@ async function onSaveBookmark(event: SubmitEvent): Promise<void> {
   if (!name) {
     return;
   }
-  let createdId = "";
-  storedState = await updateStoredState((state) => {
-    if (
-      findEquivalentBookmark(state, {
-        videoId: currentLoop.videoId!,
-        start: currentLoop.start!,
-        end: currentLoop.end!,
-        rate: currentLoop.rate ?? 1
-      })
-    ) {
-      return;
-    }
-    const bookmark = addBookmark(state, {
+  const result = await mutateStoredState({
+    operation: "create-bookmark",
+    input: {
       name,
       folderId: editorFolder.value || null,
-      videoId: currentLoop.videoId!,
+      videoId: currentLoop.videoId,
       videoTitle: currentLoop.videoTitle ?? t("youtubeVideo"),
-      start: currentLoop.start!,
-      end: currentLoop.end!,
+      start: currentLoop.start,
+      end: currentLoop.end,
       rate: currentLoop.rate ?? 1
-    });
-    createdId = bookmark.id;
+    }
   });
-  if (!createdId) {
+  storedState = result.state;
+  if (result.status !== "created" || !result.entityId) {
     editorStatus.textContent = t("alreadySaved");
     editorStatus.dataset.error = "true";
     return;
   }
+  const createdId = result.entityId;
   currentLoop.bookmarkId = createdId;
   currentLoop.bookmarkName = name;
   expandAncestors(editorFolder.value || null);
@@ -700,30 +983,27 @@ async function onUpdateCurrentBookmark(): Promise<void> {
     return;
   }
   const rate = clampRate(currentLoop.rate ?? 1);
-  if (
-    findEquivalentBookmark(
-      storedState,
-      {
-        videoId: currentLoop.videoId,
-        start: currentLoop.start,
-        end: currentLoop.end,
-        rate
-      },
-      bookmark.id
-    )
-  ) {
+  const result = await mutateStoredState({
+    operation: "update-bookmark-parameters",
+    bookmarkId: bookmark.id,
+    parameters: {
+      start: currentLoop.start,
+      end: currentLoop.end,
+      rate
+    }
+  });
+  storedState = result.state;
+  if (result.status === "duplicate") {
     saveStatus.textContent = t("duplicateFragment");
     saveStatus.dataset.error = "true";
     return;
   }
-  storedState = await updateStoredState((state) => {
-    const latestBookmark = state.bookmarks.find((candidate) => candidate.id === bookmark.id);
-    if (latestBookmark) {
-      latestBookmark.start = currentLoop.start!;
-      latestBookmark.end = currentLoop.end!;
-      latestBookmark.rate = rate;
-    }
-  });
+  if (result.status === "missing") {
+    delete currentLoop.bookmarkId;
+    delete currentLoop.bookmarkName;
+    renderCurrentLoop();
+    return;
+  }
   saveStatus.textContent = t("parametersUpdated");
   saveStatus.dataset.error = "false";
   renderTree();
@@ -731,53 +1011,55 @@ async function onUpdateCurrentBookmark(): Promise<void> {
   saveStatus.textContent = t("parametersUpdated");
 }
 
-async function onUpdateBookmark(event: SubmitEvent): Promise<void> {
-  event.preventDefault();
+async function onUpdateBookmark(): Promise<void> {
   const bookmark = selectedBookmark();
-  if (!bookmark) {
+  if (!bookmark || !editorBaseline) {
     return;
   }
-  const start = editorStart.valueAsNumber;
-  const end = editorEnd.valueAsNumber;
+  const start = normalizeLoopTime(editorStart.valueAsNumber);
+  const end = normalizeLoopTime(editorEnd.valueAsNumber);
   const rate = clampRate(editorRate.valueAsNumber);
-  if (
-    !editorName.value.trim() ||
-    !Number.isFinite(start) ||
-    !Number.isFinite(end) ||
-    end - start < MIN_LOOP_SECONDS
-  ) {
-    editorStatus.textContent = t("invalidEditorSegment", [String(MIN_LOOP_SECONDS)]);
-    editorStatus.dataset.error = "true";
+  const segmentValidation = validateSegment(start, end);
+  if (!editorName.value.trim() || !segmentValidation.valid) {
+    showEditorValidation(
+      segmentValidation.reason === "tooShort" ? "invalidEditorSegment" : "invalidEditorBounds",
+      [String(segmentValidation.reason === "tooShort" ? MIN_LOOP_SECONDS : MAX_LOOP_TIME_SECONDS)]
+    );
     return;
   }
-  if (
-    findEquivalentBookmark(
-      storedState,
-      {
-        videoId: bookmark.videoId,
-        start,
-        end,
-        rate
-      },
-      bookmark.id
-    )
-  ) {
+  const name = editorName.value.trim();
+  const folderId = editorFolder.value || null;
+  const changes: BookmarkPatch = {};
+  if (name !== editorBaseline.name) changes.name = name;
+  if (folderId !== editorBaseline.folderId) changes.folderId = folderId;
+  if (start !== editorBaseline.start) changes.start = start;
+  if (end !== editorBaseline.end) changes.end = end;
+  if (rate !== editorBaseline.rate) changes.rate = rate;
+  if (Object.keys(changes).length === 0) {
+    editorStatus.textContent = t("changesSaved");
+    editorStatus.dataset.error = "false";
+    return;
+  }
+  const result = await mutateStoredState({
+    operation: "update-bookmark",
+    bookmarkId: bookmark.id,
+    changes
+  });
+  storedState = result.state;
+  if (result.status === "duplicate") {
     editorStatus.textContent = t("duplicateFragment");
     editorStatus.dataset.error = "true";
     return;
   }
-  storedState = await updateStoredState((state) => {
-    updateBookmark(state, bookmark.id, {
-      name: editorName.value,
-      folderId: editorFolder.value || null,
-      start,
-      end,
-      rate
-    });
-  });
-  expandAncestors(editorFolder.value || null);
+  if (result.status === "missing") {
+    closeModal();
+    render();
+    return;
+  }
+  const updatedBookmark = result.state.bookmarks.find((candidate) => candidate.id === bookmark.id);
+  expandAncestors(updatedBookmark?.folderId ?? null);
   if (currentLoop.bookmarkId === bookmark.id) {
-    currentLoop.bookmarkName = editorName.value.trim();
+    currentLoop.bookmarkName = updatedBookmark?.name ?? name;
   }
   render();
   editorStatus.textContent = t("changesSaved");
@@ -811,11 +1093,19 @@ function onDeleteSelectedBookmark(): void {
     );
     return;
   }
-  void (async () => {
-    storedState = await updateStoredState((state) => deleteBookmark(state, bookmark.id));
-    closeModal();
-    render();
-  })();
+  runPopupAction(
+    async () => {
+      const result = await mutateStoredState({
+        operation: "delete-bookmark",
+        bookmarkId: bookmark.id
+      });
+      storedState = result.state;
+      closeModal();
+      render();
+    },
+    editorStatus,
+    { key: "delete-bookmark", controls: [deleteBookmarkButton] }
+  );
 }
 
 async function openSelectedBookmark(): Promise<void> {

@@ -13,6 +13,7 @@ includes:
 - Playback speeds from 0.25× to 4×.
 - Pitch preservation is always enabled for useful music practice playback.
 - Per-video A/B persistence and global playback preferences.
+- Independent active playback per tab with concurrency-safe library updates across tabs and windows.
 - Automatic suspension while a YouTube ad is playing.
 - A dedicated spinner replaces video controls until an ad finishes.
 - Support for YouTube's in-page navigation.
@@ -64,13 +65,24 @@ either place without changing the fragment name or folder. Drag a fragment row o
 alternative.
 
 Use the ↗ action in either interface to copy a canonical `youtube.com/watch?...#ytl=…` link. The
-Base64URL payload contains only its version, video ID, A, B and speed—not the cosmetic name or
-folder. Opening it with YT Looper installed validates the payload, seeks to A and activates the
-loop; it remains unsaved until the user chooses a default or custom name. Without the extension, it
-opens as a normal YouTube link near A.
+Base64URL payload contains only its version, A, B and speed—not the redundant video ID, cosmetic
+name or folder. The video ID comes from YouTube's regular `v` query parameter. Opening it with YT
+Looper installed validates the payload, seeks to A and activates the loop; it remains unsaved until
+the user chooses a default or custom name. Version 1 links containing the video ID remain supported.
+Without the extension, it opens as a normal YouTube link near A.
 
 A small startup script captures loop and bookmark parameters at `document_start`, before YouTube can
-normalize them out of the visible address. The heavier controller still loads at `document_idle`.
+normalize them out of the visible address. The heavier controller still loads at `document_idle` and
+retains the request across advertisements or replacement video elements until the main video can
+apply it.
+
+Each YouTube tab owns its live player and loop-enabled state, so starting or stopping playback in
+one tab never controls another. Library, remembered A/B points and the preferred speed are
+profile-wide. Their writes are serialized by a non-persistent background coordinator, and duplicate
+checks happen inside the same transaction. Editor changes are merged by field against the newest
+stored bookmark, so a stale rename cannot revert a folder move or parameter update from another
+window. Failed reads abort before writing, and the coordinator resumes from extension storage after
+an idle restart.
 
 The close button appears while the widget is expanded. Closing it hides the widget for that video
 while keeping shortcuts and loop behavior available; use **Show panel** in the toolbar popup to
@@ -115,6 +127,8 @@ npm run build:all         # Build all three desktop browsers
 npm run fixture           # Local YouTube-like page for UI checks
 npm run test              # Unit tests
 npm run test:coverage     # Full suite with enforced coverage thresholds
+npm run test:e2e          # Product flows in Chromium, Firefox and WebKit
+npm run test:e2e:install  # Install the three local Playwright engines once
 npm run typecheck         # Strict TypeScript check
 npm run lint              # TypeScript, CSS, HTML and Markdown linters
 npm run check             # Reproducible offline CI quality gate
@@ -134,17 +148,19 @@ archive.
 
 ```text
 src/core/       Browser-independent loop behavior
+src/background/ Profile-wide storage mutation coordinator
 src/content/    Lifecycle and coordination inside YouTube
 src/sites/      YouTube-specific detection and navigation
 src/ui/         Shadow DOM overlay
 src/platform/   WebExtension storage adapter
 manifests/      Browser-specific manifests
 tests/          Unit tests
+e2e/            Real-browser product and packaged-extension flows
 ```
 
 See [quality engineering](docs/QUALITY.md), the [functional test matrix](docs/TEST_MATRIX.md), the
-[release runbook](docs/RELEASING.md), and the [development plan](docs/DEVELOPMENT_PLAN.md) for
-enforced guarantees and future milestones.
+[release runbook](docs/RELEASING.md), [marketplace readiness](docs/MARKETPLACE_READINESS.md), and
+the [development plan](docs/DEVELOPMENT_PLAN.md) for enforced guarantees and future milestones.
 
 The bilingual [user Wiki](https://github.com/AdriRRP/yt-looper/wiki) covers every product feature,
 manual installation from release ZIPs for all three browsers, privacy and troubleshooting.

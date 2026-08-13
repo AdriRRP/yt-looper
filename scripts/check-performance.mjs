@@ -17,9 +17,9 @@ const harness = await build({
     contents: `
       import { addBookmark, findEquivalentBookmark } from "./src/library/bookmarks.ts";
       import { LoopEngine } from "./src/core/loop-engine.ts";
-      import { createDefaultState } from "./src/platform/storage.ts";
+      import { createDefaultState, loadStoredState } from "./src/platform/storage.ts";
       import { decodeSharedLoop, encodeSharedLoop } from "./src/sharing/loop-links.ts";
-      export function run() {
+      export async function run() {
         const loop = { videoId: "dQw4w9WgXcQ", start: 12.5, end: 18.75, rate: 0.75 };
         for (let index = 0; index < 50_000; index += 1) {
           const encoded = encodeSharedLoop(loop);
@@ -32,6 +32,27 @@ const harness = await build({
         for (let index = 0; index < 1_000; index += 1) {
           if (!findEquivalentBookmark(state, { videoId: "dQw4w9WgXcQ", start: index, end: index + 1, rate: 1 })) throw new Error("lookup failure");
         }
+        const folders = Array.from({ length: 10_000 }, (_, index) => ({
+          id: "folder-" + index,
+          name: "Folder " + index,
+          parentId: index === 0 ? null : "folder-" + (index - 1),
+          createdAt: index
+        }));
+        globalThis.browser = {
+          storage: {
+            local: {
+              async get() {
+                return {
+                  ytLooperStorageLayoutV1: 1,
+                  ytLooperLibraryV1: { version: 1, folders, bookmarks: [] }
+                };
+              },
+              async set() {}
+            }
+          }
+        };
+        const normalized = await loadStoredState();
+        if (normalized.folders.length !== folders.length) throw new Error("folder normalization failure");
         class Media extends EventTarget {
           currentTime = 0;
           duration = 100;
@@ -62,7 +83,7 @@ const harness = await build({
 const moduleUrl = `data:text/javascript;base64,${Buffer.from(harness.outputFiles[0].text).toString("base64")}`;
 const { run } = await import(moduleUrl);
 const operationsStart = performance.now();
-run();
+await run();
 const operationsMs = performance.now() - operationsStart;
 
 const limits = { buildMs: 15_000, operationsMs: 3_000 };

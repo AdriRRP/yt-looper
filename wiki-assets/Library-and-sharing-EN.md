@@ -54,15 +54,16 @@ YouTube URL with a validated Base64URL payload.
 The link contains only:
 
 - Format version.
-- Video identifier.
 - A point.
 - B point.
 - Playback speed.
 
-It does not contain the name or folder, and nothing is uploaded to a loop server. Opening the link
-with YT Looper installed validates the data, seeks to A, and enables the loop. The recipient can use
-it without saving or add it to their own library under any name. Without YT Looper, the URL still
-opens the regular YouTube video near the fragment's start.
+The video identifier already lives in YouTube's normal `v` parameter outside the payload. It does
+not contain the name or folder, and nothing is uploaded to a loop server. Legacy links that also
+carried the identifier inside the payload remain supported. Opening the link with YT Looper
+installed validates the data, seeks to A, and enables the loop. The recipient can use it without
+saving or add it to their own library under any name. Without YT Looper, the URL still opens the
+regular YouTube video near the fragment's start.
 
 ## Generated names
 

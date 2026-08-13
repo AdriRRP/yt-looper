@@ -22,7 +22,8 @@
           <div class="eyebrow" id="tree-heading" data-i18n="library">Biblioteca</div>
           <span id="bookmark-count">0 fragmentos</span>
         </div>
-        <div class="tree" id="library-tree"></div>
+        <div class="tree" id="library-tree" role="list" aria-labelledby="tree-heading"></div>
+        <p class="status library-status" id="library-status" role="status"></p>
       </section>
 
       <section class="current-card" id="current-card" aria-labelledby="current-heading" hidden>
@@ -141,6 +142,7 @@
         role="dialog"
         aria-modal="true"
         aria-labelledby="editor-heading"
+        aria-describedby="editor-status"
       >
         <div class="sheet-handle" aria-hidden="true"></div>
         <div class="card-heading sheet-heading">
@@ -169,15 +171,15 @@
           <div class="editor-grid">
             <label
               ><span data-i18n="startSeconds">A (s)</span
-              ><input id="editor-start" type="number" min="0" step="0.05" required
+              ><input id="editor-start" type="number" min="0" max="31536000" step="any" required
             /></label>
             <label
               ><span data-i18n="endSeconds">B (s)</span
-              ><input id="editor-end" type="number" min="0" step="0.05" required
+              ><input id="editor-end" type="number" min="0" max="31536000" step="any" required
             /></label>
             <label
               ><span data-i18n="speed">Velocidad</span
-              ><input id="editor-rate" type="number" min="0.25" max="4" step="0.05" required
+              ><input id="editor-rate" type="number" min="0.25" max="4" step="any" required
             /></label>
           </div>
           <label>

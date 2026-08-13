@@ -6,6 +6,9 @@ web-ext-artifacts/
 .DS_Store
 *.log
 coverage/
+playwright-report/
+test-results/
+.fixture-tls/
 .eslintcache
 .stylelintcache
 *.tgz

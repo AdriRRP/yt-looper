@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  applyStorageChanges,
   createDefaultState,
   loadStoredState,
   saveStoredState,
@@ -76,6 +77,116 @@ describe("storage lifecycle and migrations", () => {
     });
   });
 
+  it("repairs corrupt slices without allowing invalid records or folder cycles to brick the UI", async () => {
+    installStorage({
+      ytLooperStateV3: createDefaultState(),
+      ytLooperRuntimeV1: {
+        version: 1,
+        settings: { rate: 99 },
+        loops: {
+          valid: { start: 1.0004, end: 2.0004 },
+          huge: { start: 1e306, end: 1.1e306 },
+          broken: { start: null, end: 2 }
+        }
+      },
+      ytLooperLibraryV1: {
+        version: 1,
+        folders: [
+          null,
+          { id: "a", name: "A", parentId: "b", createdAt: 1 },
+          { id: "b", name: "B", parentId: "a", createdAt: 2 },
+          { id: "a", name: "Duplicate", parentId: null, createdAt: 3 }
+        ],
+        bookmarks: [
+          {
+            id: "good",
+            name: "Good",
+            folderId: "missing",
+            videoId: "video",
+            videoTitle: "Video",
+            start: 1.0004,
+            end: 2.0004,
+            rate: 99,
+            createdAt: 1
+          },
+          { id: "bad", name: "Bad", videoId: "video", videoTitle: "Video", start: 2, end: 1 }
+        ]
+      }
+    });
+
+    const repaired = await loadStoredState();
+    expect(repaired.settings.rate).toBe(4);
+    expect(repaired.loops).toEqual({ valid: { start: 1, end: 2 } });
+    expect(repaired.folders).toHaveLength(2);
+    expect(repaired.folders.some((folder) => folder.parentId === null)).toBe(true);
+    expect(repaired.bookmarks).toEqual([
+      expect.objectContaining({ id: "good", folderId: null, start: 1, end: 2, rate: 4 })
+    ]);
+  });
+
+  it("applies storage change payloads directly without a profile-wide reread", () => {
+    const initial = createDefaultState();
+    const updated = applyStorageChanges(initial, {
+      ytLooperRuntimeV1: {
+        newValue: {
+          version: 1,
+          settings: { rate: 0.75 },
+          loops: { song: { start: 1, end: 2 } }
+        }
+      },
+      ytLooperLibraryV1: {
+        newValue: {
+          version: 1,
+          folders: [{ id: "folder", name: "Folder", parentId: null, createdAt: 1 }],
+          bookmarks: []
+        }
+      }
+    });
+
+    expect(updated).toMatchObject({
+      settings: { rate: 0.75 },
+      loops: { song: { start: 1, end: 2 } },
+      folders: [{ id: "folder" }]
+    });
+    expect(initial).toEqual(createDefaultState());
+  });
+
+  it("resets deleted split slices and never resurrects a stale compatibility snapshot", async () => {
+    const initial = createDefaultState();
+    initial.settings.rate = 2;
+    initial.loops.song = { start: 1, end: 2 };
+    initial.folders.push({ id: "stale", name: "Stale", parentId: null, createdAt: 1 });
+    initial.bookmarks.push({
+      id: "stale-bookmark",
+      name: "Stale",
+      folderId: "stale",
+      videoId: "abc123XYZ_-",
+      videoTitle: "Video",
+      start: 1,
+      end: 2,
+      rate: 1,
+      createdAt: 1
+    });
+    installStorage({
+      ytLooperStateV3: initial,
+      ytLooperStorageLayoutV1: 1,
+      ytLooperRuntimeV1: { version: 1, settings: { rate: 0.75 }, loops: {} }
+    });
+
+    await expect(loadStoredState()).resolves.toMatchObject({
+      settings: { rate: 0.75 },
+      loops: {},
+      folders: [],
+      bookmarks: []
+    });
+
+    const changed = applyStorageChanges(initial, {
+      ytLooperRuntimeV1: { oldValue: {}, newValue: undefined },
+      ytLooperLibraryV1: { oldValue: {}, newValue: undefined }
+    });
+    expect(changed).toEqual(createDefaultState());
+  });
+
   it("migrates version two, removes pitch preferences and persists version three", async () => {
     const storage = installStorage({
       ytLooperStateV2: {
@@ -148,7 +259,17 @@ describe("storage lifecycle and migrations", () => {
   });
 
   it("serializes combined updates and writes only changed slices", async () => {
-    const storage = installStorage({ ytLooperStateV3: createDefaultState() });
+    const defaults = createDefaultState();
+    const storage = installStorage({
+      ytLooperStateV3: defaults,
+      ytLooperRuntimeV1: { version: 1, settings: defaults.settings, loops: defaults.loops },
+      ytLooperLibraryV1: {
+        version: 1,
+        folders: defaults.folders,
+        bookmarks: defaults.bookmarks
+      },
+      ytLooperStorageLayoutV1: 1
+    });
     const first = updateStoredState((state) => {
       state.settings.rate = 1.25;
     });
@@ -183,5 +304,26 @@ describe("storage lifecycle and migrations", () => {
         state.settings.rate = 2;
       })
     ).resolves.toMatchObject({ settings: { rate: 2 } });
+  });
+
+  it("aborts an update after a failed read instead of overwriting storage with defaults", async () => {
+    const initial = createDefaultState();
+    initial.folders.push({ id: "safe", name: "Keep me", parentId: null, createdAt: 1 });
+    const storage = installStorage({ ytLooperStateV3: initial });
+    storage.get.mockRejectedValueOnce(new Error("temporary read failure"));
+
+    await expect(
+      updateStoredState((current) => {
+        current.settings.rate = 2;
+      })
+    ).rejects.toThrow("temporary read failure");
+    expect(storage.set).not.toHaveBeenCalled();
+    expect(storage.memory.ytLooperStateV3).toEqual(initial);
+
+    await expect(
+      updateStoredState((current) => {
+        current.settings.rate = 1.5;
+      })
+    ).resolves.toMatchObject({ folders: [{ id: "safe" }], settings: { rate: 1.5 } });
   });
 });

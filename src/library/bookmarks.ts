@@ -1,4 +1,5 @@
 import type { StoredBookmark, StoredFolder, StoredState } from "../platform/storage";
+import { normalizeLoopTime } from "../core/loop-engine";
 
 export interface BookmarkInput {
   name: string;
@@ -18,6 +19,8 @@ export interface BookmarkChanges {
   rate: number;
 }
 
+export type BookmarkPatch = Partial<BookmarkChanges>;
+
 export interface FragmentParameters {
   videoId: string;
   start: number;
@@ -25,8 +28,8 @@ export interface FragmentParameters {
   rate: number;
 }
 
-const TIME_TOLERANCE_SECONDS = 0.02;
-const RATE_TOLERANCE = 0.001;
+const TIME_TOLERANCE_SECONDS = 0.0005;
+const RATE_TOLERANCE = 0.0005;
 
 export function bookmarkMatchesParameters(
   bookmark: StoredBookmark,
@@ -47,10 +50,11 @@ function createId(): string {
 export function addFolder(
   state: StoredState,
   name: string,
-  parentId: string | null = null
+  parentId: string | null = null,
+  id = createId()
 ): StoredFolder {
   const folder: StoredFolder = {
-    id: createId(),
+    id,
     name: name.trim(),
     parentId,
     createdAt: Date.now()
@@ -77,15 +81,19 @@ export function deleteFolder(state: StoredState, folderId: string): void {
   }
 }
 
-export function addBookmark(state: StoredState, input: BookmarkInput): StoredBookmark {
+export function addBookmark(
+  state: StoredState,
+  input: BookmarkInput,
+  id = createId()
+): StoredBookmark {
   const bookmark: StoredBookmark = {
-    id: createId(),
+    id,
     name: input.name.trim(),
     folderId: input.folderId,
     videoId: input.videoId,
     videoTitle: input.videoTitle,
-    start: input.start,
-    end: input.end,
+    start: normalizeLoopTime(input.start),
+    end: normalizeLoopTime(input.end),
     rate: input.rate,
     createdAt: Date.now()
   };
@@ -96,17 +104,27 @@ export function addBookmark(state: StoredState, input: BookmarkInput): StoredBoo
 export function updateBookmark(
   state: StoredState,
   bookmarkId: string,
-  changes: BookmarkChanges
+  changes: BookmarkPatch
 ): StoredBookmark | null {
   const bookmark = state.bookmarks.find((candidate) => candidate.id === bookmarkId);
   if (!bookmark) {
     return null;
   }
-  bookmark.name = changes.name.trim();
-  bookmark.folderId = changes.folderId;
-  bookmark.start = changes.start;
-  bookmark.end = changes.end;
-  bookmark.rate = changes.rate;
+  if (changes.name !== undefined) {
+    bookmark.name = changes.name.trim();
+  }
+  if (changes.folderId !== undefined) {
+    bookmark.folderId = changes.folderId;
+  }
+  if (changes.start !== undefined) {
+    bookmark.start = normalizeLoopTime(changes.start);
+  }
+  if (changes.end !== undefined) {
+    bookmark.end = normalizeLoopTime(changes.end);
+  }
+  if (changes.rate !== undefined) {
+    bookmark.rate = changes.rate;
+  }
   return bookmark;
 }
 

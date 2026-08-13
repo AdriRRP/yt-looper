@@ -1,14 +1,12 @@
 {
   "manifest_version": 3,
   "name": "__MSG_extensionName__",
-  "version": "0.12.0",
+  "version": "0.13.0",
   "description": "__MSG_extensionDescription__",
   "default_locale": "es",
   "permissions": ["storage", "activeTab", "clipboardWrite"],
-  "icons": {
-    "48": "icons/icon.svg",
-    "96": "icons/icon.svg"
-  },
+  "background": { "scripts": ["background.js"] },
+  "icons": { "48": "icons/icon.svg", "96": "icons/icon.svg" },
   "action": {
     "default_title": "__MSG_actionTitle__",
     "default_popup": "popup.html",
@@ -29,10 +27,8 @@
   "browser_specific_settings": {
     "gecko": {
       "id": "{affbee7a-986d-4f1d-a4b2-d148f54df6eb}",
-      "strict_min_version": "142.0",
-      "data_collection_permissions": {
-        "required": ["none"]
-      }
+      "strict_min_version": "140.0",
+      "data_collection_permissions": { "required": ["none"] }
     }
   }
 }

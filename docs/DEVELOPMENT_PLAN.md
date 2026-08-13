@@ -45,7 +45,7 @@ submission remain.
 - [x] Add repeatable CPU/build stress tests and bundle-size budgets.
 - [x] Enforce strict types, linting, dead-code detection and coverage thresholds.
 - [x] Add CI, CodeQL, dependency review, Scorecard, Dependabot and release provenance.
-- [ ] Add store screenshots and AMO listing metadata.
+- [x] Add bilingual store screenshots, promotional assets and marketplace metadata.
 - [ ] Profile CPU usage during multi-hour playback in real browsers.
 - Define a recovery strategy when YouTube changes its DOM.
 - Package and submit a signed beta through AMO.
@@ -58,22 +58,26 @@ Status: implementation completed in version 0.10.0; store beta pending.
 - [x] Share storage, popup, content scripts, localization and loop behavior with Firefox.
 - [x] Add Chrome-compatible 16/32/48/128 PNG manifest icons.
 - [x] Verify MV3 permissions, Promise-based storage and shared acceptance tests.
+- [x] Serialize library and preference mutations across tabs, windows and worker restarts.
 - [ ] Complete a wider Chrome QA matrix against real YouTube layouts.
-- [ ] Prepare Chrome Web Store metadata and publish a beta.
+- [x] Prepare Chrome Web Store metadata and privacy declarations.
+- [ ] Publish a Chrome Web Store beta.
 
 ## Milestone 4 — Safari
 
 Status: implementation and local Safari verification completed in version 0.11.0; store distribution
 remains.
 
-- [x] Audit WebExtension API and Manifest V3 compatibility for Safari 15.4+.
+- [x] Audit WebExtension API and Manifest V3 compatibility for Safari 15.5+.
 - [x] Add a Safari manifest, build, validation and temporary ZIP target.
 - [x] Request an explicit YouTube host permission and reuse the shared storage format.
 - [x] Prepare a macOS-only Xcode project generator.
 - [x] Install full Xcode and run Apple's Safari Web Extension Packager.
 - [x] Verify the core loop, storage, popup and YouTube permission flow in Safari on macOS.
+- [x] Share the concurrency-safe background storage coordinator with Safari MV3.
 - [ ] Complete a wider fullscreen, multi-window and long-playback Safari QA matrix.
-- [ ] Prepare macOS App Store Connect metadata and distribution.
+- [x] Prepare macOS App Store Connect metadata and distribution assets.
+- [ ] Submit a TestFlight/App Store beta.
 
 ## Later product candidates
 

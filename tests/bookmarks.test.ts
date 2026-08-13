@@ -48,11 +48,19 @@ describe("bookmark library", () => {
     expect(
       findEquivalentBookmark(state, {
         videoId: "same-video",
-        start: 10.01,
-        end: 15.01,
+        start: 10.0004,
+        end: 15.0004,
         rate: 0.75
       })?.id
     ).toBe(bookmark.id);
+    expect(
+      findEquivalentBookmark(state, {
+        videoId: "same-video",
+        start: 10.01,
+        end: 15.01,
+        rate: 0.75
+      })
+    ).toBeNull();
 
     updateBookmark(state, bookmark.id, {
       name: "Nombre definitivo del usuario",
@@ -94,6 +102,29 @@ describe("bookmark library", () => {
         rate: 0.75
       })
     ).toBeNull();
+  });
+
+  it("normalizes floating-point artifacts when creating and updating bookmarks", () => {
+    const state = createDefaultState();
+    const saved = addBookmark(state, {
+      name: "Precise",
+      folderId: null,
+      videoId: "same-video",
+      videoTitle: "Song",
+      start: 0.1 + 0.2,
+      end: 1.1 + 0.2,
+      rate: 0.75
+    });
+    expect(saved).toMatchObject({ start: 0.3, end: 1.3 });
+
+    updateBookmark(state, saved.id, {
+      name: "Precise",
+      folderId: null,
+      start: 2.1 + 0.2,
+      end: 3.1 + 0.2,
+      rate: 0.75
+    });
+    expect(saved).toMatchObject({ start: 2.3, end: 3.3 });
   });
 
   it("supports nested folders and safely reparents their contents", () => {

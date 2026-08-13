@@ -52,8 +52,8 @@ See the dedicated instructions for [Firefox](/AdriRRP/yt-looper/wiki/Install-Fir
 
 YT Looper collects no telemetry, browsing history, video content, or personal information, and it
 does not upload the library to a server. Loops, names, and folders are stored in the extension's
-local browser storage. Shared links are generated locally and contain only a format version, video
-identifier, A, B, and speed.
+local browser storage. Shared links are generated locally and contain only a format version, A, B,
+and speed. The video identifier remains in YouTube's normal `v` parameter.
 
 The extension requests YouTube access to locate and control its video player. It does not download
 remote code.

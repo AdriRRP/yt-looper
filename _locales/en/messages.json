@@ -53,6 +53,10 @@
     "message": "Delete folder $NAME$",
     "placeholders": { "name": { "content": "$1" } }
   },
+  "confirmDeleteFolder": {
+    "message": "Confirm deletion of folder $NAME$",
+    "placeholders": { "name": { "content": "$1" } }
+  },
   "expandFolder": { "message": "Expand $NAME$", "placeholders": { "name": { "content": "$1" } } },
   "collapseFolder": {
     "message": "Collapse $NAME$",
@@ -77,6 +81,12 @@
     "message": "B must be at least $SECONDS$ s after A.",
     "placeholders": { "seconds": { "content": "$1" } }
   },
+  "invalidEditorBounds": {
+    "message": "A and B must be between 0 and $SECONDS$ seconds.",
+    "placeholders": { "seconds": { "content": "$1" } }
+  },
+  "invalidEditorName": { "message": "Enter a name for the fragment." },
+  "invalidEditorRate": { "message": "Speed must be between 0.25× and 4×." },
   "widgetMinimize": { "message": "Minimize" },
   "widgetExpand": { "message": "Expand" },
   "widgetHide": { "message": "Hide controls for this video" },
@@ -118,5 +128,11 @@
   "shareLoop": { "message": "Copy loop link" },
   "linkCopied": { "message": "Loop link copied." },
   "copyFailed": { "message": "Could not copy the link." },
-  "sharedLoopLoaded": { "message": "Shared loop loaded" }
+  "sharedLoopLoaded": { "message": "Shared loop loaded" },
+  "operationFailed": {
+    "message": "The operation could not be completed. Please try again."
+  },
+  "libraryLoadFailed": {
+    "message": "The library could not be loaded. Reopen the menu in a few seconds."
+  }
 }

@@ -1,6 +1,7 @@
 interface I18nApi {
   i18n?: {
     getMessage(key: string, substitutions?: string | string[]): string;
+    getUILanguage?(): string;
   };
 }
 
@@ -36,6 +37,7 @@ const fallbackMessages: Record<string, string> = {
   rootLibrary: "Biblioteca (raíz)",
   createFolderInside: "Crear carpeta dentro de $1",
   deleteFolder: "Eliminar carpeta $1",
+  confirmDeleteFolder: "Confirmar eliminación de la carpeta $1",
   expandFolder: "Expandir $1",
   collapseFolder: "Contraer $1",
   emptyFolder: "Carpeta vacía",
@@ -51,6 +53,9 @@ const fallbackMessages: Record<string, string> = {
   movedToFolder: "Fragmento movido a $1.",
   duplicateFragment: "Ya existe un fragmento con estos parámetros.",
   invalidEditorSegment: "B debe estar al menos $1 s después de A.",
+  invalidEditorBounds: "A y B deben estar entre 0 y $1 segundos.",
+  invalidEditorName: "Escribe un nombre para el fragmento.",
+  invalidEditorRate: "La velocidad debe estar entre 0,25× y 4×.",
   widgetMinimize: "Minimizar",
   widgetExpand: "Expandir",
   widgetHide: "Ocultar controles en este vídeo",
@@ -86,7 +91,9 @@ const fallbackMessages: Record<string, string> = {
   shareLoop: "Copiar enlace del loop",
   linkCopied: "Enlace del loop copiado.",
   copyFailed: "No se pudo copiar el enlace.",
-  sharedLoopLoaded: "Loop compartido cargado"
+  sharedLoopLoaded: "Loop compartido cargado",
+  operationFailed: "No se pudo completar la operación. Inténtalo de nuevo.",
+  libraryLoadFailed: "No se pudo cargar la biblioteca. Vuelve a abrir el menú en unos segundos."
 };
 
 const extensionGlobal = globalThis as typeof globalThis & {
@@ -105,6 +112,12 @@ export function t(key: string, substitutions: string[] = []): string {
 }
 
 export function localizeDocument(root: ParentNode = document): void {
+  const language = i18nApi?.getUILanguage?.() ?? "es";
+  if (root === document) {
+    document.documentElement.lang = language;
+  } else if (root instanceof ShadowRoot) {
+    root.host.setAttribute("lang", language);
+  }
   for (const element of root.querySelectorAll<HTMLElement>("[data-i18n]")) {
     element.textContent = t(element.dataset.i18n ?? "");
   }

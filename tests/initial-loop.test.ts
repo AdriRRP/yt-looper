@@ -18,7 +18,7 @@ describe("initial loop selection", () => {
   it("gives a shared link priority over a local bookmark and remembered loop", () => {
     expect(
       selectInitialLoop(
-        { v: 1, i: "dQw4w9WgXcQ", a: 3, b: 8, r: 0.65 },
+        { v: 2, i: "dQw4w9WgXcQ", a: 3, b: 8, r: 0.65 },
         bookmark,
         { start: 40, end: 50 },
         1.25

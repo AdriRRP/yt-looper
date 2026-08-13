@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "visualSources": [
+    "_locales/en/messages.json",
+    "_locales/es/messages.json",
+    "assets/icons/icon-128.png",
+    "fixtures/content-mock.js",
+    "fixtures/popup-mock.js",
+    "fixtures/youtube-watch.html",
+    "popup/popup.css",
+    "popup/popup.html",
+    "src/platform/i18n.ts",
+    "src/popup/index.ts",
+    "src/ui/panel.ts"
+  ],
+  "sha256": "a47dcdf8dd148f073c0ec919fb14460941456a25de3dea5eeb363f33b6e00e15"
+}

@@ -33,11 +33,11 @@ jobs:
       tag: ${{ steps.release.outputs.tag }}
       version: ${{ steps.release.outputs.version }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref }}
           persist-credentials: false
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: 24
           cache: npm
@@ -73,26 +73,69 @@ jobs:
           echo "version=$version" >> "$GITHUB_OUTPUT"
       - name: Run complete quality gate
         run: npm run check:full
+      - name: Upload the verified browser builds
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: verified-browser-builds-v${{ steps.release.outputs.version }}
+          path: dist/
+          if-no-files-found: error
+          retention-days: 14
 
-  package:
-    name: Package verified extensions
+  browser-flows:
+    name: Release browser flows (${{ matrix.browser }})
     needs: verify
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [chromium, firefox, webkit]
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref }}
           persist-credentials: false
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: 24
           cache: npm
       - run: npm ci
-      - name: Build release assets once
-        run: npm run release:package
+      - name: Download the exact verified browser builds
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: verified-browser-builds-v${{ needs.verify.outputs.version }}
+          path: dist
+      - name: Install the real browser engine
+        run: npx playwright install --with-deps ${{ matrix.browser }}
+      - name: Exercise product flows
+        env:
+          YT_LOOPER_E2E_PREBUILT: "1"
+        run: npm run test:e2e -- --project=${{ matrix.browser }}
+
+  package:
+    name: Package verified extensions
+    needs: [verify, browser-flows]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref }}
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Download the exact browser builds exercised by E2E
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: verified-browser-builds-v${{ needs.verify.outputs.version }}
+          path: dist
+      - name: Package the already verified browser builds
+        run: npm run release:package -- --prebuilt
       - name: Upload immutable release bundle
-        uses: actions/upload-artifact@v7.0.1
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: yt-looper-release-v${{ needs.verify.outputs.version }}
           path: artifacts/release/
@@ -103,7 +146,7 @@ jobs:
         if: needs.verify.outputs.dry_run == 'true'
         run: |
           echo "## Release dry run v${{ needs.verify.outputs.version }}" >> "$GITHUB_STEP_SUMMARY"
-          echo "All checks passed. The downloadable workflow artifact contains the three browser ZIPs, SBOM, release manifest and checksums." >> "$GITHUB_STEP_SUMMARY"
+          echo "All checks passed. The downloadable workflow artifact contains the three browser ZIPs, AMO source ZIP, SBOM, release manifest and checksums." >> "$GITHUB_STEP_SUMMARY"
 
   publish:
     name: Publish GitHub Release
@@ -116,12 +159,12 @@ jobs:
       contents: write
       id-token: write
     steps:
-      - uses: actions/download-artifact@v8.0.1
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: yt-looper-release-v${{ needs.verify.outputs.version }}
           path: artifacts/release
       - name: Attest release assets
-        uses: actions/attest-build-provenance@v4.2.2
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
           subject-path: artifacts/release/*
       - name: Create or repair GitHub Release
@@ -141,4 +184,4 @@ jobs:
       - name: Publish summary
         run: |
           echo "## Published ${{ needs.verify.outputs.tag }}" >> "$GITHUB_STEP_SUMMARY"
-          echo "The GitHub Release contains independently named Firefox, Chrome and Safari packages plus integrity and supply-chain metadata." >> "$GITHUB_STEP_SUMMARY"
+          echo "The GitHub Release contains independently named Firefox, Chrome and Safari packages, AMO sources, integrity metadata and provenance." >> "$GITHUB_STEP_SUMMARY"

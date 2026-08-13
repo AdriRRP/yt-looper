@@ -79,7 +79,7 @@ const styles = `
     flex: 0 0 auto;
     place-items: center;
     border-radius: 6px;
-    background: #ff2945;
+    background: #d10f2f;
     color: white;
     font-size: 15px;
     font-weight: 700;
@@ -106,8 +106,8 @@ const styles = `
     background: transparent;
   }
   .header-button:hover { background: rgba(255, 255, 255, .1); }
-  .dismiss { display: grid; color: white; background: #ff2945; }
-  .dismiss:hover { background: #ff4860; }
+  .dismiss { display: grid; color: white; background: #d10f2f; }
+  .dismiss:hover { background: #b90d2a; }
   .share-header { color: white; background: #2f7df6; }
   .share-header:hover { background: #4a90ff; }
   .share-header[hidden] { display: none; }
@@ -117,8 +117,7 @@ const styles = `
   .collapse-glyph { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; transition: transform .18s ease; }
   .body { padding: 1px 8px 8px; }
   .panel[data-collapsed="true"] { width: 166px; }
-  .panel[data-collapsed="true"] .body,
-  .panel[data-collapsed="true"] .ad-loading { display: none; }
+  .panel[data-collapsed="true"] .body { display: none; }
   .panel[data-collapsed="true"] .collapse-glyph { transform: rotate(180deg); }
   .panel[data-collapsed="true"] .dismiss { display: none; }
   .panel[data-ad="true"] .body { display: none; }
@@ -145,7 +144,7 @@ const styles = `
   }
   @keyframes ad-spin { to { transform: rotate(360deg); } }
   @media (prefers-reduced-motion: reduce) {
-    .ad-spinner { animation-duration: 1.5s; }
+    .ad-spinner { animation: none; border-top-color: #ff5b70; }
   }
   .time-row {
     display: grid;
@@ -166,7 +165,8 @@ const styles = `
     background: #242529;
     font-variant-numeric: tabular-nums;
   }
-  input:focus { border-color: #ff5b70; outline: none; }
+  input:focus { border-color: #ff5b70; }
+  button:focus-visible, input:focus-visible { outline: 2px solid #8db7ff; outline-offset: 2px; }
   .button-group { display: flex; gap: 3px; }
   .small-button, .capture-button, .action-button {
     display: inline-flex;
@@ -204,8 +204,8 @@ const styles = `
   .persist-button[data-mode="update"]:hover { background: #ffb957; }
   .persist-button[data-mode="current"] { color: #14251b; background: #79d39c; cursor: default; }
   .persist-button:disabled { opacity: .72; }
-  .loop-button { background: #ff2945; }
-  .loop-button:hover { background: #ff4860; }
+  .loop-button { background: #d10f2f; }
+  .loop-button:hover { background: #b90d2a; }
   .loop-button[data-enabled="true"] { color: #181818; background: #e4e4e4; }
   .persist-icon { display: grid; place-items: center; }
   .persist-icon[hidden] { display: none; }
@@ -275,7 +275,7 @@ const panelMarkup = `
       <div class="saved-banner" data-dirty="false" hidden><span class="saved-check"><svg class="state-glyph saved-current-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m6.5 12.5 3.5 3.5 7.5-8"></path></svg><svg class="state-glyph saved-dirty-icon" viewBox="0 0 24 24" aria-hidden="true" hidden><path d="m14.8 5.2 4 4M5 19l3.8-.8L18 8.9a1.8 1.8 0 0 0-4-4L4.8 14Z"></path><path d="m12.8 7.2 4 4"></path></svg></span><strong class="saved-banner-name"></strong><button class="saved-detach" type="button" data-action="detach" data-i18n-aria-label="detachSavedLoop" data-i18n-title="detachSavedLoop">×</button></div>
       <div class="time-row">
         <span class="point">A</span>
-        <input data-field="start" type="number" min="0" step="0.05" placeholder="0.00" aria-label="A">
+        <input data-field="start" type="number" min="0" step="0.001" placeholder="0.000" aria-label="A">
         <div class="button-group">
           <button class="small-button" type="button" data-action="start-back" data-i18n-title="widgetStartBack" aria-label="− A">−</button>
           <button class="capture-button" type="button" data-action="start-now" data-i18n-title="widgetSetStart" data-i18n-aria-label="widgetSetStart"><span class="capture-icon"></span></button>
@@ -284,7 +284,7 @@ const panelMarkup = `
       </div>
       <div class="time-row">
         <span class="point">B</span>
-        <input data-field="end" type="number" min="0" step="0.05" placeholder="0.00" aria-label="B">
+        <input data-field="end" type="number" min="0" step="0.001" placeholder="0.000" aria-label="B">
         <div class="button-group">
           <button class="small-button" type="button" data-action="end-back" data-i18n-title="widgetEndBack" aria-label="− B">−</button>
           <button class="capture-button" type="button" data-action="end-now" data-i18n-title="widgetSetEnd" data-i18n-aria-label="widgetSetEnd"><span class="capture-icon"></span></button>
@@ -373,10 +373,10 @@ export class LoopPanel {
     this.#setCollapsed(this.#collapseState.syncParameters(model.start, model.end));
 
     if (this.#root.activeElement !== startInput) {
-      startInput.value = model.start === null ? "" : model.start.toFixed(2);
+      startInput.value = model.start === null ? "" : model.start.toFixed(3);
     }
     if (this.#root.activeElement !== endInput) {
-      endInput.value = model.end === null ? "" : model.end.toFixed(2);
+      endInput.value = model.end === null ? "" : model.end.toFixed(3);
     }
     if (this.#root.activeElement !== rateInput) {
       rateInput.value = String(Number(model.rate.toFixed(2)));
@@ -541,27 +541,37 @@ export class LoopPanel {
   }
 
   async #persistLoop(): Promise<void> {
-    if (!this.#model.savedBookmarkId) {
-      const saved = await this.#actions.saveCurrentLoop();
-      this.showMessage(t(saved ? "savedFragment" : "duplicateFragment"), !saved);
-      return;
+    try {
+      if (!this.#model.savedBookmarkId) {
+        const saved = await this.#actions.saveCurrentLoop();
+        this.showMessage(t(saved ? "savedFragment" : "duplicateFragment"), !saved);
+        return;
+      }
+      const result = await this.#actions.updateBookmarkParameters();
+      this.showMessage(
+        t(
+          result === "updated"
+            ? "parametersUpdated"
+            : result === "duplicate"
+              ? "duplicateFragment"
+              : "loopUnavailable"
+        ),
+        result !== "updated"
+      );
+    } catch (error) {
+      console.warn("YT Looper could not persist the loop.", error);
+      this.showMessage(t("operationFailed"), true);
     }
-    const result = await this.#actions.updateBookmarkParameters();
-    this.showMessage(
-      t(
-        result === "updated"
-          ? "parametersUpdated"
-          : result === "duplicate"
-            ? "duplicateFragment"
-            : "loopUnavailable"
-      ),
-      result !== "updated"
-    );
   }
 
   async #shareLoop(): Promise<void> {
-    const copied = await this.#actions.shareLoop();
-    this.showMessage(t(copied ? "linkCopied" : "copyFailed"), !copied);
+    try {
+      const copied = await this.#actions.shareLoop();
+      this.showMessage(t(copied ? "linkCopied" : "copyFailed"), !copied);
+    } catch (error) {
+      console.warn("YT Looper could not share the loop.", error);
+      this.showMessage(t("operationFailed"), true);
+    }
   }
 
   #setDefaultStatus(): void {

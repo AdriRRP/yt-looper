@@ -26,6 +26,10 @@ assert(
 );
 assert(manifest.action?.default_popup === "popup.html", "Chrome popup entry is invalid.");
 assert(
+  manifest.background?.service_worker === "background.js",
+  "Chrome storage coordinator service worker is invalid."
+);
+assert(
   ["storage", "activeTab", "clipboardWrite"].every((permission) =>
     manifest.permissions?.includes(permission)
   ),
@@ -33,6 +37,7 @@ assert(
 );
 
 await assertFile(manifest.action?.default_popup, "Popup");
+await assertFile(manifest.background?.service_worker, "Background service worker");
 for (const script of manifest.content_scripts ?? []) {
   for (const relativePath of script.js ?? []) {
     await assertFile(relativePath, "Content script");

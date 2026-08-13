@@ -199,6 +199,24 @@ describe("video widget integration", () => {
     panel.destroy();
   });
 
+  it("shows localized feedback when persistence or sharing rejects", async () => {
+    const warning = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const actions = actionSpies();
+    vi.mocked(actions.saveCurrentLoop).mockRejectedValue(new Error("storage unavailable"));
+    vi.mocked(actions.shareLoop).mockRejectedValue(new Error("clipboard unavailable"));
+    const panel = new LoopPanel(document.querySelector("#player")!, actions, true);
+    panel.update(baseModel({ start: 1, end: 2, canSave: true, canShare: true }));
+
+    click("persist");
+    await vi.waitFor(() =>
+      expect(shadow().querySelector(".status")!.textContent).toContain("No se pudo completar")
+    );
+    click("share");
+    await vi.waitFor(() => expect(warning).toHaveBeenCalledTimes(2));
+    expect(shadow().querySelector<HTMLElement>(".status")!.dataset.error).toBe("true");
+    panel.destroy();
+  });
+
   it("hides, restores, destroys and replaces an existing widget safely", () => {
     const first = new LoopPanel(document.querySelector("#player")!, actionSpies(), false);
     first.hide();

@@ -1,4 +1,5 @@
 import { YtLooperController } from "./controller";
+import type { StorageChanges } from "../platform/storage";
 
 const SHUTDOWN_EVENT = "yt-looper:shutdown-existing-instance";
 document.dispatchEvent(new CustomEvent(SHUTDOWN_EVENT));
@@ -20,8 +21,8 @@ interface RuntimeMessageApi {
   };
   storage?: {
     onChanged?: {
-      addListener(listener: () => void): void;
-      removeListener(listener: () => void): void;
+      addListener(listener: (changes: StorageChanges, areaName: string) => void): void;
+      removeListener(listener: (changes: StorageChanges, areaName: string) => void): void;
     };
   };
 }
@@ -33,13 +34,44 @@ const extensionGlobal = globalThis as typeof globalThis & {
 const runtime = extensionGlobal.browser?.runtime ?? extensionGlobal.chrome?.runtime;
 const storageChanges =
   extensionGlobal.browser?.storage?.onChanged ?? extensionGlobal.chrome?.storage?.onChanged;
-const onStorageChanged = (): void => {
-  void controller.reloadStoredState();
+let pendingStorageChanges: StorageChanges = {};
+let storageChangeTimer: number | null = null;
+const onStorageChanged = (changes: StorageChanges, areaName: string): void => {
+  if (areaName !== "local") {
+    return;
+  }
+  pendingStorageChanges = { ...pendingStorageChanges, ...changes };
+  if (storageChangeTimer !== null) {
+    window.clearTimeout(storageChangeTimer);
+  }
+  storageChangeTimer = window.setTimeout(() => {
+    const latestChanges = pendingStorageChanges;
+    pendingStorageChanges = {};
+    storageChangeTimer = null;
+    controller.applyStoredStateChanges(latestChanges);
+  }, 75);
 };
+const onVisibilityChange = (): void => {
+  if (document.visibilityState === "hidden") {
+    controller.flushPendingState();
+  }
+};
+const onPageHide = (): void => controller.flushPendingState();
 storageChanges?.addListener(onStorageChanged);
-document.addEventListener(SHUTDOWN_EVENT, () => storageChanges?.removeListener(onStorageChanged), {
-  once: true
-});
+document.addEventListener("visibilitychange", onVisibilityChange);
+window.addEventListener("pagehide", onPageHide);
+document.addEventListener(
+  SHUTDOWN_EVENT,
+  () => {
+    storageChanges?.removeListener(onStorageChanged);
+    document.removeEventListener("visibilitychange", onVisibilityChange);
+    window.removeEventListener("pagehide", onPageHide);
+    if (storageChangeTimer !== null) {
+      window.clearTimeout(storageChangeTimer);
+    }
+  },
+  { once: true }
+);
 runtime?.onMessage?.addListener((message, _sender, sendResponse) => {
   if (
     typeof message === "object" &&

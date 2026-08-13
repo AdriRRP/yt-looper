@@ -131,7 +131,25 @@ function panel(): PanelRecord {
 }
 
 async function settle(): Promise<void> {
-  await new Promise((resolve) => window.setTimeout(resolve, 0));
+  await new Promise((resolve) => window.setTimeout(resolve, 220));
+}
+
+function replacePlayer(
+  duration = 60,
+  readyState = 1
+): {
+  player: HTMLElement;
+  video: HTMLVideoElement;
+} {
+  document.body.innerHTML = '<div id="movie_player"><video class="html5-main-video"></video></div>';
+  const player = document.querySelector<HTMLElement>("#movie_player")!;
+  const video = document.querySelector<HTMLVideoElement>("video")!;
+  Object.defineProperties(video, {
+    duration: { configurable: true, value: duration },
+    readyState: { configurable: true, value: readyState },
+    play: { configurable: true, value: vi.fn().mockResolvedValue(undefined) }
+  });
+  return { player, video };
 }
 
 beforeEach(() => {
@@ -145,6 +163,29 @@ afterEach(() => {
 });
 
 describe("content controller use cases", () => {
+  it("reports a background persistence failure without breaking the active widget", async () => {
+    const warning = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const harness = await setupController();
+    const storageSet = (
+      globalThis as typeof globalThis & {
+        browser: { storage: { local: { set: ReturnType<typeof vi.fn> } } };
+      }
+    ).browser.storage.local.set;
+    storageSet.mockRejectedValueOnce(new Error("quota"));
+
+    panel().actions.setRate(0.8);
+    await settle();
+
+    expect(panel().messages.at(-1)).toEqual([
+      "No se pudo completar la operación. Inténtalo de nuevo.",
+      true,
+      undefined
+    ]);
+    expect(warning).toHaveBeenCalled();
+    expect(harness.controller.getCurrentLoop()).toMatchObject({ available: true, rate: 0.8 });
+    harness.controller.destroy();
+  });
+
   it("coordinates marking, adjusting, playback, persistence, sharing and widget visibility", async () => {
     const { controller, player, video, memory, writeText } = await setupController();
     expect(controller.getCurrentLoop()).toMatchObject({
@@ -322,6 +363,214 @@ describe("content controller use cases", () => {
     expect(panel().messages.some(([message, error]) => message.includes("fuera") && error)).toBe(
       true
     );
+    controller.destroy();
+  });
+
+  it("preserves a shared request when YouTube replaces a transient video element", async () => {
+    const sharedUrl = buildSharedLoopUrl({
+      videoId: "abc123XYZ_-",
+      start: 10,
+      end: 15,
+      rate: 0.75
+    })!;
+    expect(captureLoopRequestUrl(sharedUrl)).toBe(true);
+    const { controller, memory } = await setupController(
+      createDefaultState(),
+      "/watch?v=abc123XYZ_-",
+      1,
+      5
+    );
+    expect(controller.getCurrentLoop()).toMatchObject({ shared: true, valid: false });
+
+    const replacement = replacePlayer();
+    controller.refresh();
+    expect(controller.getCurrentLoop()).toMatchObject({
+      shared: true,
+      start: 10,
+      end: 15,
+      rate: 0.75,
+      valid: true
+    });
+    expect(replacement.video.currentTime).toBe(10);
+    expect(replacement.video.play).toHaveBeenCalledOnce();
+    await expect(panel().actions.saveCurrentLoop()).resolves.toBe(true);
+    expect((memory.ytLooperLibraryV1 as StoredState).bookmarks[0]).toMatchObject({
+      videoId: "abc123XYZ_-",
+      start: 10,
+      end: 15,
+      rate: 0.75
+    });
+    controller.destroy();
+  });
+
+  it("does not reapply a handled shared request after the user changes the loop", async () => {
+    const sharedUrl = buildSharedLoopUrl({
+      videoId: "abc123XYZ_-",
+      start: 10,
+      end: 15,
+      rate: 0.75
+    })!;
+    expect(captureLoopRequestUrl(sharedUrl)).toBe(true);
+    const { controller } = await setupController(createDefaultState(), undefined, 1);
+    panel().actions.setStart(20);
+    panel().actions.setEnd(25);
+    await settle();
+
+    replacePlayer();
+    controller.refresh();
+    expect(controller.getCurrentLoop()).toMatchObject({
+      shared: false,
+      start: 20,
+      end: 25,
+      valid: true
+    });
+    controller.destroy();
+  });
+
+  it("replaces a pending request during SPA navigation and never applies it to another video", async () => {
+    const firstUrl = buildSharedLoopUrl({
+      videoId: "abc123XYZ_-",
+      start: 10,
+      end: 15,
+      rate: 0.75
+    })!;
+    expect(captureLoopRequestUrl(firstUrl)).toBe(true);
+    const { controller } = await setupController(createDefaultState(), undefined, 1);
+
+    history.replaceState({}, "", "/watch?v=dQw4w9WgXcQ");
+    const secondUrl = buildSharedLoopUrl({
+      videoId: "dQw4w9WgXcQ",
+      start: 30,
+      end: 36,
+      rate: 1.25
+    })!;
+    expect(captureLoopRequestUrl(secondUrl)).toBe(true);
+    const replacement = replacePlayer();
+    controller.refresh();
+    expect(controller.getCurrentLoop()).toMatchObject({
+      videoId: "dQw4w9WgXcQ",
+      shared: true,
+      start: 30,
+      end: 36,
+      rate: 1.25,
+      valid: true
+    });
+    expect(replacement.video.currentTime).toBe(30);
+    controller.destroy();
+  });
+
+  it("preserves a library request when YouTube replaces a transient video element", async () => {
+    expect(
+      captureLoopRequestUrl("https://www.youtube.com/watch?v=abc123XYZ_-&ytl_bookmark=bookmark-1")
+    ).toBe(true);
+    const { controller } = await setupController(savedState(), "/watch?v=abc123XYZ_-", 1, 5);
+    expect(controller.getCurrentLoop()).toMatchObject({ bookmarkId: "bookmark-1", valid: false });
+
+    const replacement = replacePlayer();
+    controller.refresh();
+    expect(controller.getCurrentLoop()).toMatchObject({
+      bookmarkId: "bookmark-1",
+      bookmarkName: "Chorus",
+      start: 10,
+      end: 15,
+      rate: 0.75,
+      valid: true
+    });
+    expect(replacement.video.currentTime).toBe(10);
+    expect(replacement.video.play).toHaveBeenCalledOnce();
+    controller.destroy();
+  });
+
+  it("defers a shared request while an ad is active and applies it after the ad", async () => {
+    const sharedUrl = buildSharedLoopUrl({
+      videoId: "abc123XYZ_-",
+      start: 10,
+      end: 15,
+      rate: 0.75
+    })!;
+    expect(captureLoopRequestUrl(sharedUrl)).toBe(true);
+    history.replaceState({}, "", "/watch?v=abc123XYZ_-");
+    document.title = "Song - YouTube";
+    const { player, video } = replacePlayer(60, 0);
+    player.classList.add("ad-showing");
+    const memory: Record<string, unknown> = { ytLooperStateV3: createDefaultState() };
+    vi.stubGlobal("browser", {
+      storage: {
+        local: {
+          get: vi.fn(async () => structuredClone(memory)),
+          set: vi.fn(async (items: Record<string, unknown>) => Object.assign(memory, items))
+        }
+      }
+    });
+    vi.stubGlobal(
+      "requestAnimationFrame",
+      vi.fn(() => 1)
+    );
+    vi.stubGlobal("cancelAnimationFrame", vi.fn());
+    const controller = new YtLooperController();
+    await controller.start();
+    video.dispatchEvent(new Event("loadedmetadata"));
+    expect(video.currentTime).toBe(0);
+    expect(video.play).not.toHaveBeenCalled();
+
+    player.classList.remove("ad-showing");
+    await settle();
+    expect(controller.getCurrentLoop()).toMatchObject({
+      shared: true,
+      start: 10,
+      end: 15,
+      rate: 0.75,
+      valid: true
+    });
+    expect(video.currentTime).toBe(10);
+    expect(video.play).toHaveBeenCalledOnce();
+    controller.destroy();
+  });
+
+  it("keeps an ad-delayed request pending when the ad duration is shorter than B", async () => {
+    const sharedUrl = buildSharedLoopUrl({
+      videoId: "abc123XYZ_-",
+      start: 10,
+      end: 15,
+      rate: 0.75
+    })!;
+    expect(captureLoopRequestUrl(sharedUrl)).toBe(true);
+    history.replaceState({}, "", "/watch?v=abc123XYZ_-");
+    const { player, video } = replacePlayer(5, 1);
+    player.classList.add("ad-showing");
+    const memory: Record<string, unknown> = { ytLooperStateV3: createDefaultState() };
+    vi.stubGlobal("browser", {
+      storage: {
+        local: {
+          get: vi.fn(async () => structuredClone(memory)),
+          set: vi.fn(async (items: Record<string, unknown>) => Object.assign(memory, items))
+        }
+      }
+    });
+    vi.stubGlobal(
+      "requestAnimationFrame",
+      vi.fn(() => 1)
+    );
+    vi.stubGlobal("cancelAnimationFrame", vi.fn());
+    const controller = new YtLooperController();
+    await controller.start();
+
+    player.classList.remove("ad-showing");
+    await settle();
+    expect(controller.getCurrentLoop()).toMatchObject({ shared: true, valid: false });
+    expect(video.play).not.toHaveBeenCalled();
+
+    const replacement = replacePlayer();
+    controller.refresh();
+    expect(controller.getCurrentLoop()).toMatchObject({
+      shared: true,
+      start: 10,
+      end: 15,
+      rate: 0.75,
+      valid: true
+    });
+    expect(replacement.video.currentTime).toBe(10);
+    expect(replacement.video.play).toHaveBeenCalledOnce();
     controller.destroy();
   });
 

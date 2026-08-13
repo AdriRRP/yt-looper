@@ -53,6 +53,10 @@
     "message": "Eliminar carpeta $NAME$",
     "placeholders": { "name": { "content": "$1" } }
   },
+  "confirmDeleteFolder": {
+    "message": "Confirmar eliminación de la carpeta $NAME$",
+    "placeholders": { "name": { "content": "$1" } }
+  },
   "expandFolder": { "message": "Expandir $NAME$", "placeholders": { "name": { "content": "$1" } } },
   "collapseFolder": {
     "message": "Contraer $NAME$",
@@ -77,6 +81,12 @@
     "message": "B debe estar al menos $SECONDS$ s después de A.",
     "placeholders": { "seconds": { "content": "$1" } }
   },
+  "invalidEditorBounds": {
+    "message": "A y B deben estar entre 0 y $SECONDS$ segundos.",
+    "placeholders": { "seconds": { "content": "$1" } }
+  },
+  "invalidEditorName": { "message": "Escribe un nombre para el fragmento." },
+  "invalidEditorRate": { "message": "La velocidad debe estar entre 0,25× y 4×." },
   "widgetMinimize": { "message": "Minimizar" },
   "widgetExpand": { "message": "Expandir" },
   "widgetHide": { "message": "Ocultar controles en este vídeo" },
@@ -118,5 +128,11 @@
   "shareLoop": { "message": "Copiar enlace del loop" },
   "linkCopied": { "message": "Enlace del loop copiado." },
   "copyFailed": { "message": "No se pudo copiar el enlace." },
-  "sharedLoopLoaded": { "message": "Loop compartido cargado" }
+  "sharedLoopLoaded": { "message": "Loop compartido cargado" },
+  "operationFailed": {
+    "message": "No se pudo completar la operación. Inténtalo de nuevo."
+  },
+  "libraryLoadFailed": {
+    "message": "No se pudo cargar la biblioteca. Vuelve a abrir el menú en unos segundos."
+  }
 }

@@ -4,7 +4,7 @@ import { createDefaultBookmarkName, formatLoopTime } from "../src/library/bookma
 describe("bookmark names", () => {
   it("creates a deterministic default from the video title and A/B points", () => {
     expect(createDefaultBookmarkName("  Canción de práctica  ", 12.5, 78.25)).toBe(
-      "Canción de práctica · 0:12.5–1:18.3"
+      "Canción de práctica · 0:12.500–1:18.250"
     );
   });
 
@@ -15,10 +15,10 @@ describe("bookmark names", () => {
       2
     );
     expect(name.length).toBeLessThanOrEqual(80);
-    expect(name).toMatch(/ · 0:01\.0–0:02\.0$/u);
+    expect(name).toMatch(/ · 0:01\.000–0:02\.000$/u);
   });
 
   it("formats minute boundaries", () => {
-    expect(formatLoopTime(60)).toBe("1:00.0");
+    expect(formatLoopTime(60)).toBe("1:00.000");
   });
 });

@@ -1,6 +1,6 @@
 # Shared loop links
 
-## Implemented first version: self-contained URL
+## Current format: self-contained URL
 
 Use a canonical YouTube URL with a versioned Base64URL payload:
 
@@ -12,23 +12,26 @@ Decoded payload:
 
 ```json
 {
-  "v": 1,
-  "i": "VIDEO_ID",
+  "v": 2,
   "a": 12.5,
   "b": 18.75,
   "r": 0.75
 }
 ```
 
-The `t` parameter provides a useful fallback for people without YT Looper. The extension reads
-`ytl`, validates it and activates the loop. The shared loop is not added to the library
-automatically; the regular save action remains available.
+The regular `v` query parameter identifies the video, so repeating that identifier inside the
+payload would be redundant. The `t` parameter provides a useful fallback for people without YT
+Looper. The extension reads `ytl`, validates it and activates the loop. The shared loop is not added
+to the library automatically; the regular save action remains available.
+
+The decoder also accepts legacy version 1 payloads containing `i`. It verifies that `i` matches
+YouTube's `v` parameter, strips unknown optional properties and normalizes both versions before use.
 
 The fragment is canonical because it does not need to be sent to YouTube's servers. Firefox and
 YouTube may still normalize it away during startup, so a minimal `document_start` content script
 captures both shared loops and local bookmark requests before YouTube runs. The main controller
-consumes that captured request later. The decoder also accepts the query form for backwards
-compatibility.
+retains that request across advertisements and replacement video elements until it can be applied to
+the main video. The decoder also accepts the query form for backwards compatibility.
 
 A UUID is not needed for this model. Base64URL is an encoding, not encryption, and the payload
 remains user-readable and editable.
@@ -51,7 +54,8 @@ On an initial YouTube page load, use this precedence:
 After video metadata is available:
 
 1. Verify payload version and maximum encoded length.
-2. Accept only a canonical YouTube video ID, not an arbitrary destination URL.
+2. Accept only a canonical YouTube video ID from the destination URL, not an arbitrary embedded
+   destination.
 3. Require finite values, `A >= 0`, `B > A`, the minimum loop duration and `B <= video.duration`.
 4. Require speed to be inside the supported range.
 5. Seek to A, apply speed and pitch preservation, and activate the loop.

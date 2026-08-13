@@ -12,7 +12,8 @@ describe("localization", () => {
   it("uses extension translations, fallbacks, substitutions and localizes attributes", async () => {
     vi.stubGlobal("browser", {
       i18n: {
-        getMessage: (key: string) => (key === "speed" ? "Speed!" : "")
+        getMessage: (key: string) => (key === "speed" ? "Speed!" : ""),
+        getUILanguage: () => "en-GB"
       }
     });
     const { localizeDocument, t } = await import("../src/platform/i18n");
@@ -24,6 +25,7 @@ describe("localization", () => {
       <input data-i18n-placeholder="newFolderName">
       <button data-i18n-aria-label="closeEditor" data-i18n-title="closeEditor"></button>`;
     localizeDocument();
+    expect(document.documentElement.lang).toBe("en-GB");
     expect(document.querySelector("span")!.textContent).toBe("Speed!");
     expect(document.querySelector("input")!.placeholder).toBe("Nombre de la carpeta");
     expect(document.querySelector("button")!.getAttribute("aria-label")).toBe("Cerrar editor");

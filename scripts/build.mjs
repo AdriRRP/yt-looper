@@ -7,7 +7,7 @@ const browserName = browserArgument?.split("=")[1] ?? "firefox";
 const browserBuilds = {
   firefox: {
     manifest: "manifests/firefox.json",
-    target: "firefox109"
+    target: "firefox140"
   },
   chrome: {
     manifest: "manifests/chrome.json",
@@ -15,7 +15,7 @@ const browserBuilds = {
   },
   safari: {
     manifest: "manifests/safari.json",
-    target: "safari15.4"
+    target: "safari15.5"
   }
 };
 const browserBuild = browserBuilds[browserName];
@@ -50,6 +50,7 @@ await cp("_locales", `${outputDirectory}/_locales`, { recursive: true });
 
 const buildContext = await context({
   entryPoints: {
+    background: "src/background/index.ts",
     early: "src/content/early.ts",
     content: "src/content/index.ts",
     popup: "src/popup/index.ts"

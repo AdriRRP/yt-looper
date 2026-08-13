@@ -18,6 +18,10 @@ interface ExtensionManifest {
   minimum_chrome_version?: string;
   host_permissions?: string[];
   browser_specific_settings?: unknown;
+  background: {
+    scripts?: string[];
+    service_worker?: string;
+  };
 }
 
 function loadManifest(name: "firefox" | "chrome" | "safari"): ExtensionManifest {
@@ -46,6 +50,20 @@ describe("browser manifests", () => {
     expect(chrome.permissions).toEqual(firefox.permissions);
     expect(chrome.content_scripts).toEqual(firefox.content_scripts);
     expect(chrome.action.default_popup).toBe(firefox.action.default_popup);
+    expect(firefox.background).toEqual({ scripts: ["background.js"] });
+    expect(chrome.background).toEqual({ service_worker: "background.js" });
+    expect(firefox.browser_specific_settings).toMatchObject({
+      gecko: {
+        strict_min_version: "140.0",
+        data_collection_permissions: { required: ["none"] }
+      }
+    });
+  });
+
+  it("transpiles to the declared Firefox and Safari compatibility floors", () => {
+    const buildScript = readFileSync(new URL("../scripts/build.mjs", import.meta.url), "utf8");
+    expect(buildScript).toContain('target: "firefox140"');
+    expect(buildScript).toContain('target: "safari15.5"');
   });
 
   it("keeps Safari product behavior aligned with the other desktop builds", () => {
@@ -54,6 +72,7 @@ describe("browser manifests", () => {
     expect(safari.permissions).toEqual(firefox.permissions);
     expect(safari.content_scripts).toEqual(firefox.content_scripts);
     expect(safari.action.default_popup).toBe(firefox.action.default_popup);
+    expect(safari.background).toEqual({ scripts: ["background.js"] });
   });
 
   it("requests only the explicit YouTube host in Safari MV3", () => {

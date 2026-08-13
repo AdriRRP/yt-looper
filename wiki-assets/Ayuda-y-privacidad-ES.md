@@ -52,8 +52,8 @@ Consulta las instrucciones específicas de [Firefox](/AdriRRP/yt-looper/wiki/Ins
 
 YT Looper no recopila telemetría, historial, contenido de vídeo ni datos personales, y no transmite
 la biblioteca a un servidor. Los loops, nombres y carpetas se guardan en el almacenamiento local de
-la extensión. Los enlaces compartidos se generan localmente e incluyen sólo versión de formato,
-identificador de vídeo, A, B y velocidad.
+la extensión. Los enlaces compartidos se generan localmente e incluyen sólo versión de formato, A, B
+y velocidad. El identificador de vídeo permanece en el parámetro normal `v` de YouTube.
 
 La extensión solicita acceso a YouTube para encontrar el reproductor y controlar el vídeo. No
 descarga código remoto.

@@ -1,5 +1,12 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { LoopEngine, clampRate, validateSegment, type LoopMedia } from "../src/core/loop-engine";
+import {
+  LoopEngine,
+  MAX_LOOP_TIME_SECONDS,
+  clampRate,
+  normalizeLoopTime,
+  validateSegment,
+  type LoopMedia
+} from "../src/core/loop-engine";
 
 class TestMedia extends EventTarget implements LoopMedia {
   currentTime = 0;
@@ -36,6 +43,15 @@ describe("complete loop engine behavior", () => {
     const engine = new LoopEngine(media, { autoMonitor: false });
     expect(clampRate(Number.NaN)).toBe(1);
     expect(clampRate(2)).toBe(2);
+    expect(normalizeLoopTime(0.1 + 0.2)).toBe(0.3);
+    expect(normalizeLoopTime(Number.POSITIVE_INFINITY)).toBe(Number.POSITIVE_INFINITY);
+    expect(normalizeLoopTime(1e306)).toBe(1e306);
+    expect(validateSegment(1e306, 1.1e306)).toEqual({ valid: false, reason: "invalid" });
+    expect(validateSegment(MAX_LOOP_TIME_SECONDS - 1, MAX_LOOP_TIME_SECONDS)).toEqual({
+      valid: true
+    });
+    engine.setSegment(0.1 + 0.2, 1.1 + 0.2);
+    expect(engine.state).toMatchObject({ start: 0.3, end: 1.3 });
     engine.setStart(-5);
     engine.setEnd(100);
     expect(engine.state).toMatchObject({ start: 0, end: 30 });

@@ -4,6 +4,7 @@
   const persistMemory = () => sessionStorage.setItem(fixtureStorageKey, JSON.stringify(memory));
   const linkedFixture = new URLSearchParams(location.search).get("linked") === "1";
   const matchingFixture = new URLSearchParams(location.search).get("match") === "1";
+  const hangingFixture = new URLSearchParams(location.search).get("hang") === "1";
   const linkedName =
     new URLSearchParams(location.search).get("long") === "1"
       ? "Solo principal — segunda vuelta, compases 17 a 32 a velocidad de estudio"
@@ -48,6 +49,9 @@
               message = message.replaceAll(`$${name.toUpperCase()}$`, values[index] ?? "");
             }
             return message;
+          },
+          getUILanguage() {
+            return "en";
           }
         }
       : undefined,
@@ -70,6 +74,9 @@
         return [{ id: 1 }];
       },
       async sendMessage(_tabId, message) {
+        if (hangingFixture) {
+          return new Promise(() => undefined);
+        }
         if (message.type === "show-widget") {
           return { shown: true };
         }

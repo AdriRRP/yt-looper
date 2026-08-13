@@ -122,7 +122,10 @@ export async function prepareReleaseVersion(version, { root = process.cwd() } = 
   ];
   await Promise.all(
     files.map(async ([path, document]) => {
-      const content = await format(JSON.stringify(document), { parser: "json" });
+      const content =
+        path === paths.lock
+          ? `${JSON.stringify(document, null, 2)}\n`
+          : await format(JSON.stringify(document), { parser: "json" });
       await writeFile(path, content, "utf8");
     })
   );

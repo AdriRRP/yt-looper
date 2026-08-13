@@ -26,6 +26,10 @@ assert(
 assert(!("minimum_chrome_version" in manifest), "Safari manifest contains Chrome-only settings.");
 assert(manifest.action?.default_popup === "popup.html", "Safari popup entry is invalid.");
 assert(
+  manifest.background?.scripts?.length === 1 && manifest.background.scripts[0] === "background.js",
+  "Safari storage coordinator background script is invalid."
+);
+assert(
   ["storage", "activeTab", "clipboardWrite"].every((permission) =>
     manifest.permissions?.includes(permission)
   ),
@@ -37,6 +41,9 @@ assert(
 );
 
 await assertFile(manifest.action?.default_popup, "Popup");
+for (const backgroundScript of manifest.background?.scripts ?? []) {
+  await assertFile(backgroundScript, "Background script");
+}
 for (const script of manifest.content_scripts ?? []) {
   assert(
     script.matches?.includes("https://www.youtube.com/*"),

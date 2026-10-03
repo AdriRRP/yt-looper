@@ -80,7 +80,7 @@
     "htmlhint": "^1.9.2",
     "jsdom": "^30.0.1",
     "knip": "^6.32.2",
-    "markdownlint-cli2": "^0.23.2",
+    "markdownlint-cli2": "^0.23.3",
     "prettier": "^3.9.6",
     "stylelint": "^17.14.1",
     "stylelint-config-standard": "^40.0.0",

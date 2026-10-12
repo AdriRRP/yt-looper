@@ -38,7 +38,7 @@ jobs:
 
       - name: Upload coverage report
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: coverage-report
           path: coverage/
@@ -46,7 +46,7 @@ jobs:
           retention-days: 14
 
       - name: Upload browser builds
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: browser-builds
           path: dist/
@@ -101,7 +101,7 @@ jobs:
         run: npm run test:e2e -- --project=${{ matrix.browser }}
       - name: Upload browser traces
         if: failure()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: browser-traces-${{ matrix.browser }}
           path: test-results/
